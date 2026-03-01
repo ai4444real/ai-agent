@@ -121,3 +121,45 @@ def test_choice_quick_success_with_google_override_text(monkeypatch):
     assert body["meta"]["google_email"] == "user@example.com"
 
     app.dependency_overrides.clear()
+
+
+def test_choice_quick_with_yesterday_sets_created_at(monkeypatch):
+    import app.things_api as things_api
+
+    class RepoCapture:
+        def __init__(self):
+            self.last_payload = None
+
+        def insert_thing(self, payload):
+            self.last_payload = payload
+            return {
+                "id": "44444444-4444-4444-4444-444444444444",
+                "created_at": payload.get("created_at", "2026-03-01T12:00:00+00:00"),
+                "type": payload["type"],
+                "value_num": payload.get("value_num"),
+                "value_text": payload.get("value_text"),
+                "tags": None,
+                "meta": payload.get("meta"),
+            }
+
+    repo = RepoCapture()
+    app.dependency_overrides[require_google_user] = lambda: {"email": "user@example.com"}
+    monkeypatch.setattr(things_api, "SupabaseRepo", lambda: repo)
+
+    client = TestClient(app)
+    r = client.post(
+        "/things/choice-quick",
+        json={
+            "type": "caffe",
+            "value_kind": "text",
+            "value_text": "corto",
+            "use_yesterday": True,
+        },
+    )
+
+    assert r.status_code == 200
+    assert repo.last_payload is not None
+    assert "created_at" in repo.last_payload
+    assert repo.last_payload["meta"]["use_yesterday"] is True
+
+    app.dependency_overrides.clear()

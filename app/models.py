@@ -69,6 +69,7 @@ class ChoiceQuickRequest(BaseModel):
     value_kind: Literal["num", "text"]
     value_num: Decimal | None = None
     value_text: str | None = None
+    use_yesterday: bool = False
     choice_label: str | None = None
     choice_icon: str | None = None
     choice_image: str | None = None

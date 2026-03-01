@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -11,6 +11,15 @@ from app.services.supabase_repo import SupabaseRepo
 from app.settings import get_settings
 
 router = APIRouter(prefix="/things", tags=["things"])
+
+
+def _resolve_created_at(use_yesterday: bool) -> str | None:
+    if not use_yesterday:
+        return None
+    settings = get_settings()
+    local_tz = ZoneInfo(settings.app_timezone)
+    local_dt = datetime.now(local_tz) - timedelta(hours=24)
+    return local_dt.astimezone(timezone.utc).isoformat()
 
 
 @router.post("", response_model=ThingResponse)
@@ -69,8 +78,12 @@ def create_choice_quick(payload: ChoiceQuickRequest, google_user: dict = Depends
             "choice_label": payload.choice_label,
             "choice_icon": payload.choice_icon,
             "choice_image": payload.choice_image,
+            "use_yesterday": payload.use_yesterday,
         },
     }
+    created_at = _resolve_created_at(payload.use_yesterday)
+    if created_at:
+        record["created_at"] = created_at
     if payload.value_kind == "num":
         if payload.value_num is not None and payload.value_num == int(payload.value_num):
             record["value_num"] = int(payload.value_num)

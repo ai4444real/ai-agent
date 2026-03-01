@@ -100,6 +100,20 @@
     }
     .ok { color: var(--ok); }
     .bad { color: var(--bad); }
+    .toggle {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .toggle.on {
+      border-color: #0f766e;
+      background: #ecfdf5;
+      color: #065f46;
+      font-weight: 700;
+    }
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -123,6 +137,7 @@
 
     <div class="card">
       <h2>Trackers (JSON Config)</h2>
+      <button id="yesterdayToggle" class="toggle" type="button">Yesterday: OFF</button>
       <div id="status"></div>
       <div id="trackers" class="tracker-grid"></div>
     </div>
@@ -131,6 +146,7 @@
   <script>
     let googleToken = "";
     const TOKEN_STORAGE_KEY = "aa_google_id_token";
+    let useYesterday = false;
 
     // Configurazione centralizzata dei tracker.
     // valueKind: "num" salva su value_num, "text" salva su value_text.
@@ -214,6 +230,7 @@
     const whoNode = document.getElementById("who");
     const statusNode = document.getElementById("status");
     const trackersNode = document.getElementById("trackers");
+    const yesterdayToggle = document.getElementById("yesterdayToggle");
 
     function setStatus(ok, text) {
       statusNode.className = ok ? "ok" : "bad";
@@ -283,6 +300,7 @@
       const payload = {
         type: cfg.type,
         value_kind: cfg.valueKind,
+        use_yesterday: useYesterday,
         choice_label: choice.label,
         choice_icon: choice.icon || null,
         choice_image: choice.image || null
@@ -308,7 +326,13 @@
         return;
       }
 
-      setStatus(true, `${cfg.type}:${choice.value} salvato. id=${r.body.id || "n/a"}`);
+      const modeLabel = useYesterday ? " [yesterday]" : "";
+      setStatus(true, `${cfg.type}:${choice.value} salvato${modeLabel}. id=${r.body.id || "n/a"}`);
+    }
+
+    function renderYesterdayToggle() {
+      yesterdayToggle.className = useYesterday ? "toggle on" : "toggle";
+      yesterdayToggle.textContent = useYesterday ? "Yesterday: ON" : "Yesterday: OFF";
     }
 
     async function onGoogleCredential(response) {
@@ -391,7 +415,14 @@
       }
     }
 
-    window.addEventListener("load", () => setTimeout(bootstrap, 200));
+    window.addEventListener("load", () => {
+      yesterdayToggle.addEventListener("click", () => {
+        useYesterday = !useYesterday;
+        renderYesterdayToggle();
+      });
+      renderYesterdayToggle();
+      setTimeout(bootstrap, 200);
+    });
   </script>
 </body>
 </html>
