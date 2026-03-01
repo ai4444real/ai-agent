@@ -39,6 +39,11 @@ def health_html() -> FileResponse:
 def summary_html() -> FileResponse:
     return FileResponse(static_dir / "summary.html")
 
+
+@app.get("/my-rules.html", include_in_schema=False)
+def my_rules_html() -> FileResponse:
+    return FileResponse(static_dir / "my-rules.html")
+
 app.include_router(things_router)
 app.include_router(actions_router)
 app.include_router(auth_router)

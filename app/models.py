@@ -42,6 +42,11 @@ class ActionResponse(BaseModel):
     run_id: UUID
 
 
+class WeeklyReportRequest(BaseModel):
+    owner_sub: str | None = None
+    owner_email: str | None = None
+
+
 class RunResponse(BaseModel):
     id: UUID
     created_at: datetime

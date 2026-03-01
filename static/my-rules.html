@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Rules</title>
+  <style>
+    :root {
+      --bg: #f7fafc;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --ok: #0f766e;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1000px; margin: 20px auto; padding: 0 12px 20px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+    .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: 12px; color: var(--muted); text-decoration: none; }
+    h1 { margin: 0; font-size: 22px; }
+    p { margin: 0; color: var(--muted); }
+    textarea {
+      width: 100%;
+      min-height: 360px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      resize: vertical;
+    }
+    .row { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #status { font-family: Consolas, monospace; font-size: 12px; min-height: 20px; margin-top: 6px; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .k { color: var(--muted); font-size: 12px; }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="top">
+        <h1>My Rules</h1>
+        <a class="pill" href="/">home</a>
+        <a class="pill" href="/summary.html">summary</a>
+        <a class="pill" href="/health.html">health runner</a>
+        <span id="who" class="pill">Not logged in</span>
+      </div>
+      <p style="margin-top:8px;">Regole utente per il report AI (testo lungo). Salva e verranno usate nel tuo report personale.</p>
+      <div id="googleSignIn" style="margin-top:8px;"></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="card">
+      <textarea id="rulesText" placeholder="Scrivi qui le regole..." disabled></textarea>
+      <div class="row">
+        <button id="reload" disabled>Reload</button>
+        <button id="save" disabled>Save</button>
+        <span id="count" class="k">0 chars</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let googleToken = "";
+    const TOKEN_STORAGE_KEY = "aa_google_id_token";
+
+    const whoNode = document.getElementById("who");
+    const statusNode = document.getElementById("status");
+    const rulesNode = document.getElementById("rulesText");
+    const reloadBtn = document.getElementById("reload");
+    const saveBtn = document.getElementById("save");
+    const countNode = document.getElementById("count");
+
+    function setStatus(ok, text) {
+      statusNode.className = ok ? "ok" : "bad";
+      statusNode.textContent = text;
+    }
+
+    function updateCount() {
+      countNode.textContent = `${rulesNode.value.length} chars`;
+    }
+
+    function setEnabled(enabled) {
+      rulesNode.disabled = !enabled;
+      reloadBtn.disabled = !enabled;
+      saveBtn.disabled = !enabled;
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(path, opts);
+      const t = await r.text();
+      let b = t;
+      try { b = JSON.parse(t); } catch (_) {}
+      return { ok: r.ok, status: r.status, body: b };
+    }
+
+    async function loadRules() {
+      if (!googleToken) return;
+      const r = await api("/config/report-rules-mine", {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${googleToken}` },
+      });
+      if (!r.ok) {
+        setStatus(false, `Load failed (${r.status})`);
+        return;
+      }
+      rulesNode.value = r.body.text || "";
+      updateCount();
+      setStatus(true, "Rules loaded");
+    }
+
+    async function saveRules() {
+      if (!googleToken) return;
+      const r = await api("/config/report-rules-mine", {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${googleToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: rulesNode.value || " " }),
+      });
+      if (!r.ok) {
+        setStatus(false, `Save failed (${r.status})`);
+        return;
+      }
+      setStatus(true, "Rules saved");
+    }
+
+    async function verifyAndSetToken(token) {
+      const verify = await api("/auth/google/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: token }),
+      });
+      if (!verify.ok) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        return false;
+      }
+      googleToken = token;
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      setEnabled(true);
+      await loadRules();
+      return true;
+    }
+
+    async function onGoogleCredential(response) {
+      const token = response.credential || "";
+      if (!token) {
+        setStatus(false, "Google token missing");
+        return;
+      }
+      const ok = await verifyAndSetToken(token);
+      if (!ok) setStatus(false, "Google login failed");
+    }
+
+    async function tryStoredLogin() {
+      const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!stored) return false;
+      return await verifyAndSetToken(stored);
+    }
+
+    async function bootstrap() {
+      setEnabled(false);
+      rulesNode.addEventListener("input", updateCount);
+      reloadBtn.addEventListener("click", loadRules);
+      saveBtn.addEventListener("click", saveRules);
+      updateCount();
+
+      const cfg = await api("/auth/google/client-id", { method: "GET" });
+      const clientId = cfg.ok ? cfg.body.client_id : "";
+      if (!clientId) {
+        setStatus(false, "GOOGLE_CLIENT_ID not configured");
+        return;
+      }
+
+      google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
+      google.accounts.id.renderButton(document.getElementById("googleSignIn"), { theme: "outline", size: "large" });
+
+      const restored = await tryStoredLogin();
+      if (!restored) {
+        setStatus(true, "Waiting for Google login...");
+      }
+    }
+
+    window.addEventListener("load", bootstrap);
+  </script>
+</body>
+</html>

@@ -2,6 +2,8 @@
 create table if not exists things (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
+  owner_sub text null,
+  owner_email text null,
   type text not null,
   value_num numeric null,
   value_text text null,
@@ -28,6 +30,8 @@ create index if not exists idx_data_snapshots_created_at
 create table if not exists runs (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
+  owner_sub text null,
+  owner_email text null,
   action text not null,
   status text not null,
   input_summary jsonb null,
@@ -40,6 +44,8 @@ create index if not exists idx_runs_created_at_action
 create table if not exists messages (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
+  owner_sub text null,
+  owner_email text null,
   channel text not null,
   recipient text not null,
   subject text not null,
@@ -56,3 +62,25 @@ create table if not exists app_config (
   value_text text not null,
   updated_at timestamptz not null default now()
 );
+
+-- USER REPORT RULES (multi-user)
+create table if not exists user_report_rules (
+  owner_sub text primary key,
+  owner_email text null,
+  value_text text not null,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_user_report_rules_owner_email on user_report_rules (owner_email);
+
+-- backward-compatible migration for existing databases
+alter table if exists things add column if not exists owner_sub text null;
+alter table if exists things add column if not exists owner_email text null;
+alter table if exists runs add column if not exists owner_sub text null;
+alter table if exists runs add column if not exists owner_email text null;
+alter table if exists messages add column if not exists owner_sub text null;
+alter table if exists messages add column if not exists owner_email text null;
+
+create index if not exists idx_things_owner_created_at on things (owner_sub, created_at desc);
+create index if not exists idx_runs_owner_created_at on runs (owner_sub, created_at desc);
+create index if not exists idx_messages_owner_created_at on messages (owner_sub, created_at desc);

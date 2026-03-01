@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from zoneinfo import ZoneInfo
 
 from app.actions.weekly_report import compute_week_window_utc
@@ -22,6 +23,13 @@ def _resolve_created_at(use_yesterday: bool) -> str | None:
     return local_dt.astimezone(timezone.utc).isoformat()
 
 
+def _owner_fields(google_user: dict) -> dict:
+    return {
+        "owner_sub": google_user.get("sub"),
+        "owner_email": google_user.get("email"),
+    }
+
+
 @router.post("", response_model=ThingResponse)
 def create_thing(payload: ThingCreateRequest) -> ThingResponse:
     repo = SupabaseRepo()
@@ -40,11 +48,40 @@ def list_things(
     return [ThingResponse(**row) for row in rows]
 
 
+@router.get("/mine", response_model=list[ThingResponse])
+def list_my_things(
+    type: str | None = None,
+    from_ts: Annotated[datetime | None, Query(alias="from")] = None,
+    to_ts: Annotated[datetime | None, Query(alias="to")] = None,
+    google_user: dict = Depends(require_google_user),
+) -> list[ThingResponse]:
+    repo = SupabaseRepo()
+    rows = repo.list_things(
+        thing_type=type,
+        from_ts=from_ts,
+        to_ts=to_ts,
+        owner_sub=google_user.get("sub"),
+    )
+    return [ThingResponse(**row) for row in rows]
+
+
+@router.delete("/mine/{thing_id}")
+def delete_my_thing(thing_id: UUID, google_user: dict = Depends(require_google_user)) -> dict:
+    repo = SupabaseRepo()
+    owner_sub = google_user.get("sub")
+    existing = repo.get_thing_by_id_owner(str(thing_id), owner_sub)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Thing not found")
+    repo.delete_thing_by_id_owner(str(thing_id), owner_sub)
+    return {"ok": True, "deleted_id": str(thing_id)}
+
+
 @router.post("/mood-quick", response_model=ThingResponse)
 def create_mood_quick(payload: MoodQuickRequest, google_user: dict = Depends(require_google_user)) -> ThingResponse:
     repo = SupabaseRepo()
     inserted = repo.insert_thing(
         {
+            **_owner_fields(google_user),
             "type": "mood",
             "value_num": payload.value_num,
             "meta": {"source": "mood_quick", "google_email": google_user.get("email")},
@@ -58,6 +95,7 @@ def create_text_quick(payload: TextQuickRequest, google_user: dict = Depends(req
     repo = SupabaseRepo()
     inserted = repo.insert_thing(
         {
+            **_owner_fields(google_user),
             "type": payload.type,
             "value_text": payload.value_text,
             "meta": {"source": "text_quick", "google_email": google_user.get("email")},
@@ -70,6 +108,7 @@ def create_text_quick(payload: TextQuickRequest, google_user: dict = Depends(req
 def create_choice_quick(payload: ChoiceQuickRequest, google_user: dict = Depends(require_google_user)) -> ThingResponse:
     repo = SupabaseRepo()
     record: dict = {
+        **_owner_fields(google_user),
         "type": payload.type,
         "meta": {
             "source": "choice_quick",
@@ -96,12 +135,12 @@ def create_choice_quick(payload: ChoiceQuickRequest, google_user: dict = Depends
     return ThingResponse(**inserted)
 
 
-@router.get("/summary-window", dependencies=[Depends(require_google_user)])
-def summary_window(days: int = Query(default=8, ge=1, le=31)) -> dict:
+@router.get("/summary-window")
+def summary_window(days: int = Query(default=8, ge=1, le=31), google_user: dict = Depends(require_google_user)) -> dict:
     settings = get_settings()
     repo = SupabaseRepo()
     start_utc, end_utc = compute_week_window_utc(window_days=days)
-    rows = repo.list_things(from_ts=start_utc, to_ts=end_utc)
+    rows = repo.list_things(from_ts=start_utc, to_ts=end_utc, owner_sub=google_user.get("sub"))
 
     local_tz = ZoneInfo(settings.app_timezone)
     local_today = datetime.now(local_tz).date()

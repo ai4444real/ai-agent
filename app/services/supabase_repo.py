@@ -22,6 +22,7 @@ class SupabaseRepo:
         thing_type: str | None = None,
         from_ts: datetime | None = None,
         to_ts: datetime | None = None,
+        owner_sub: str | None = None,
     ) -> list[dict[str, Any]]:
         query = self._client.table("things").select("*").order("created_at", desc=True)
         if thing_type:
@@ -30,15 +31,25 @@ class SupabaseRepo:
             query = query.gte("created_at", from_ts.isoformat())
         if to_ts:
             query = query.lte("created_at", to_ts.isoformat())
+        if owner_sub:
+            query = query.eq("owner_sub", owner_sub)
         response = query.execute()
         return response.data or []
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
-    def create_run(self, action: str, input_summary: dict[str, Any] | None = None) -> dict[str, Any]:
+    def create_run(
+        self,
+        action: str,
+        input_summary: dict[str, Any] | None = None,
+        owner_sub: str | None = None,
+        owner_email: str | None = None,
+    ) -> dict[str, Any]:
         response = (
             self._client.table("runs")
             .insert(
                 {
+                    "owner_sub": owner_sub,
+                    "owner_email": owner_email,
                     "action": action,
                     "status": "running",
                     "input_summary": input_summary,
@@ -77,11 +88,15 @@ class SupabaseRepo:
         body: str,
         action: str,
         run_id: UUID | str | None,
+        owner_sub: str | None = None,
+        owner_email: str | None = None,
     ) -> dict[str, Any]:
         response = (
             self._client.table("messages")
             .insert(
                 {
+                    "owner_sub": owner_sub,
+                    "owner_email": owner_email,
                     "channel": channel,
                     "recipient": recipient,
                     "subject": subject,
@@ -115,3 +130,50 @@ class SupabaseRepo:
             .execute()
         )
         return response.data[0]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def get_user_report_rules(self, owner_sub: str) -> str | None:
+        response = (
+            self._client.table("user_report_rules")
+            .select("value_text")
+            .eq("owner_sub", owner_sub)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        if not rows:
+            return None
+        return rows[0].get("value_text")
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def set_user_report_rules(self, owner_sub: str, owner_email: str | None, value_text: str) -> dict[str, Any]:
+        response = (
+            self._client.table("user_report_rules")
+            .upsert(
+                {
+                    "owner_sub": owner_sub,
+                    "owner_email": owner_email,
+                    "value_text": value_text,
+                },
+                on_conflict="owner_sub",
+            )
+            .execute()
+        )
+        return response.data[0]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def get_thing_by_id_owner(self, thing_id: str, owner_sub: str) -> dict[str, Any] | None:
+        response = (
+            self._client.table("things")
+            .select("*")
+            .eq("id", thing_id)
+            .eq("owner_sub", owner_sub)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        return rows[0] if rows else None
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def delete_thing_by_id_owner(self, thing_id: str, owner_sub: str) -> None:
+        self._client.table("things").delete().eq("id", thing_id).eq("owner_sub", owner_sub).execute()

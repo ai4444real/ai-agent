@@ -98,6 +98,33 @@
       font-size: 12px;
       white-space: pre-wrap;
     }
+    .last-created {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .undo-btn {
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #b91c1c;
+      border-radius: 999px;
+      width: 24px;
+      height: 24px;
+      line-height: 22px;
+      text-align: center;
+      padding: 0;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .undo-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
     .ok { color: var(--ok); }
     .bad { color: var(--bad); }
     .toggle {
@@ -125,6 +152,7 @@
         <a class="pill" href="/health">/health</a>
         <a class="pill" href="/health.html">health runner</a>
         <a class="pill" href="/summary.html">summary</a>
+        <a class="pill" href="/my-rules.html">my rules</a>
       </div>
     </div>
 
@@ -139,6 +167,10 @@
       <h2>Trackers (JSON Config)</h2>
       <button id="yesterdayToggle" class="toggle" type="button">Yesterday: OFF</button>
       <div id="status"></div>
+      <div id="lastCreatedRow" class="last-created" style="display:none;">
+        <span id="lastCreatedText"></span>
+        <button id="undoBtn" class="undo-btn" type="button" title="Undo last insert">X</button>
+      </div>
       <div id="trackers" class="tracker-grid"></div>
     </div>
   </div>
@@ -231,6 +263,10 @@
     const statusNode = document.getElementById("status");
     const trackersNode = document.getElementById("trackers");
     const yesterdayToggle = document.getElementById("yesterdayToggle");
+    const lastCreatedRow = document.getElementById("lastCreatedRow");
+    const lastCreatedText = document.getElementById("lastCreatedText");
+    const undoBtn = document.getElementById("undoBtn");
+    let lastCreatedId = null;
 
     function setStatus(ok, text) {
       statusNode.className = ok ? "ok" : "bad";
@@ -328,6 +364,35 @@
 
       const modeLabel = useYesterday ? " [yesterday]" : "";
       setStatus(true, `${cfg.type}:${choice.value} salvato${modeLabel}. id=${r.body.id || "n/a"}`);
+      if (r.body.id) {
+        lastCreatedId = r.body.id;
+        lastCreatedText.textContent = `last: ${cfg.type}:${choice.value} id=${r.body.id}`;
+        lastCreatedRow.style.display = "flex";
+      }
+    }
+
+    async function undoLastCreated() {
+      if (!googleToken || !lastCreatedId) {
+        return;
+      }
+      const ok = window.confirm("Undo ultimo inserimento?");
+      if (!ok) {
+        return;
+      }
+      undoBtn.disabled = true;
+      const r = await api(`/things/mine/${lastCreatedId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${googleToken}` },
+      });
+      undoBtn.disabled = false;
+      if (!r.ok) {
+        setStatus(false, `Undo failed (${r.status}): ${JSON.stringify(r.body)}`);
+        return;
+      }
+      setStatus(true, `Undo ok. deleted id=${lastCreatedId}`);
+      lastCreatedId = null;
+      lastCreatedRow.style.display = "none";
+      lastCreatedText.textContent = "";
     }
 
     function renderYesterdayToggle() {
@@ -416,6 +481,7 @@
     }
 
     window.addEventListener("load", () => {
+      undoBtn.addEventListener("click", undoLastCreated);
       yesterdayToggle.addEventListener("click", () => {
         useYesterday = !useYesterday;
         renderYesterdayToggle();

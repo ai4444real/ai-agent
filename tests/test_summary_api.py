@@ -7,7 +7,11 @@ from app.main import app
 
 
 class RepoSummaryStub:
-    def list_things(self, thing_type=None, from_ts=None, to_ts=None):
+    def __init__(self):
+        self.last_owner_sub = None
+
+    def list_things(self, thing_type=None, from_ts=None, to_ts=None, owner_sub=None):
+        self.last_owner_sub = owner_sub
         return [
             {
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -39,8 +43,9 @@ def test_summary_window_requires_google_auth():
 def test_summary_window_returns_aggregates(monkeypatch):
     import app.things_api as things_api
 
-    app.dependency_overrides[require_google_user] = lambda: {"email": "user@example.com"}
-    monkeypatch.setattr(things_api, "SupabaseRepo", lambda: RepoSummaryStub())
+    app.dependency_overrides[require_google_user] = lambda: {"email": "user@example.com", "sub": "google-sub-1"}
+    repo = RepoSummaryStub()
+    monkeypatch.setattr(things_api, "SupabaseRepo", lambda: repo)
 
     client = TestClient(app)
     r = client.get("/things/summary-window?days=8", headers={"Authorization": "Bearer fake"})
@@ -51,5 +56,6 @@ def test_summary_window_returns_aggregates(monkeypatch):
     assert body["total_entries"] == 3
     assert body["by_type"]["caffe"] == 2
     assert body["coffee_today"] >= 0
+    assert repo.last_owner_sub == "google-sub-1"
 
     app.dependency_overrides.clear()
