@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_timezone: str = Field(default="Europe/Zurich", alias="APP_TIMEZONE")
+    report_window_days: int = Field(default=8, alias="REPORT_WINDOW_DAYS")
 
     supabase_url: str = Field(alias="SUPABASE_URL")
     supabase_service_role_key: str = Field(alias="SUPABASE_SERVICE_ROLE_KEY")

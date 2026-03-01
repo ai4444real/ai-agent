@@ -33,11 +33,12 @@ def latest_runs(limit: int = Query(default=10, ge=1, le=50)) -> list[RunResponse
 async def weekly_report_action() -> ActionResponse:
     repo = SupabaseRepo()
     settings = get_settings()
+    window_days = getattr(settings, "report_window_days", 8)
     llm_helper = OpenAIReportHelper()
-    start_utc, end_utc = compute_week_window_utc(window_days=settings.report_window_days)
+    start_utc, end_utc = compute_week_window_utc(window_days=window_days)
     run = repo.create_run(
         action="weekly_report",
-        input_summary={"from": start_utc.isoformat(), "to": end_utc.isoformat(), "window_days": settings.report_window_days},
+        input_summary={"from": start_utc.isoformat(), "to": end_utc.isoformat(), "window_days": window_days},
     )
     run_id = run["id"]
 
@@ -50,7 +51,7 @@ async def weekly_report_action() -> ActionResponse:
 
         metrics = calculate_metrics(values)
         report_payload = {
-            "window_days": settings.report_window_days,
+            "window_days": window_days,
             "mood_metrics": metrics,
             "tracker_summary": tracker_summary,
         }
@@ -62,7 +63,7 @@ async def weekly_report_action() -> ActionResponse:
         except Exception:
             pass
         body = render_weekly_report(metrics, summary, signal, micro_action)
-        body += f"\n\nTracker snapshot ({settings.report_window_days}d):\n{render_tracker_snapshot(tracker_summary)}"
+        body += f"\n\nTracker snapshot ({window_days}d):\n{render_tracker_snapshot(tracker_summary)}"
         if rules_text:
             body += f"\n\nRules context excerpt:\n{rules_text[:300]}"
 
