@@ -25,6 +25,8 @@ MAIL_TO=
 APP_TIMEZONE=Europe/Zurich
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
+GOOGLE_CLIENT_ID=
+GOOGLE_ALLOWED_EMAILS=
 ```
 
 ## 3) Run locally
@@ -55,6 +57,16 @@ curl -X POST http://127.0.0.1:8000/things \
 ```bash
 curl "http://127.0.0.1:8000/things?type=mood"
 ```
+
+### Mood quick (Google login)
+
+Open:
+
+```text
+http://127.0.0.1:8000/mood.html
+```
+
+Then login with Google and click mood `1..5`.
 
 ### Trigger weekly report
 

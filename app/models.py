@@ -53,3 +53,21 @@ class RunResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     ok: bool
+
+
+class MoodQuickRequest(BaseModel):
+    value_num: int = Field(ge=1, le=5)
+
+
+class GoogleVerifyRequest(BaseModel):
+    id_token: str = Field(min_length=10)
+
+
+class GoogleUserResponse(BaseModel):
+    sub: str
+    email: str
+    name: str | None = None
+
+
+class GoogleClientIdResponse(BaseModel):
+    client_id: str

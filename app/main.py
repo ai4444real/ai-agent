@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.actions_api import router as actions_router
+from app.auth_api import router as auth_router
 from app.models import HealthResponse
 from app.things_api import router as things_router
 
@@ -23,5 +24,11 @@ def health_html() -> FileResponse:
     return FileResponse(static_dir / "health.html")
 
 
+@app.get("/mood.html", include_in_schema=False)
+def mood_html() -> FileResponse:
+    return FileResponse(static_dir / "mood.html")
+
+
 app.include_router(things_router)
 app.include_router(actions_router)
+app.include_router(auth_router)

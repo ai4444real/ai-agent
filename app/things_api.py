@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.models import ThingCreateRequest, ThingResponse
+from app.auth_google import require_google_user
+from app.models import MoodQuickRequest, ThingCreateRequest, ThingResponse
 from app.services.supabase_repo import SupabaseRepo
 
 router = APIRouter(prefix="/things", tags=["things"])
@@ -25,3 +26,16 @@ def list_things(
     repo = SupabaseRepo()
     rows = repo.list_things(thing_type=type, from_ts=from_ts, to_ts=to_ts)
     return [ThingResponse(**row) for row in rows]
+
+
+@router.post("/mood-quick", response_model=ThingResponse)
+def create_mood_quick(payload: MoodQuickRequest, google_user: dict = Depends(require_google_user)) -> ThingResponse:
+    repo = SupabaseRepo()
+    inserted = repo.insert_thing(
+        {
+            "type": "mood",
+            "value_num": payload.value_num,
+            "meta": {"source": "mood_quick", "google_email": google_user.get("email")},
+        }
+    )
+    return ThingResponse(**inserted)

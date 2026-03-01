@@ -8,3 +8,4 @@ tenacity
 openai
 aiosmtplib
 pytest
+google-auth

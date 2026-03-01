@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mood Quick</title>
+  <style>
+    :root {
+      --bg: #f7fafc;
+      --card: #ffffff;
+      --line: #e2e8f0;
+      --text: #111827;
+      --muted: #6b7280;
+      --ok: #0f766e;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #dbeafe, #f7fafc 45%);
+    }
+    .wrap { max-width: 760px; margin: 32px auto; padding: 0 16px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .sub { margin: 0 0 12px; color: var(--muted); }
+    .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    #status {
+      margin-top: 8px;
+      min-height: 22px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .chip {
+      display: inline-block;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Mood Quick</h1>
+      <p class="sub">Login Google richiesto. Poi clicca il tuo mood 1..5.</p>
+      <span id="who" class="chip">Not logged in</span>
+      <div id="googleSignIn" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <p class="sub" style="margin-bottom:10px;">Seleziona mood</p>
+      <div class="row">
+        <button data-mood="1" disabled>1</button>
+        <button data-mood="2" disabled>2</button>
+        <button data-mood="3" disabled>3</button>
+        <button data-mood="4" disabled>4</button>
+        <button data-mood="5" disabled>5</button>
+      </div>
+      <div id="status"></div>
+    </div>
+  </div>
+
+  <script>
+    let googleToken = "";
+
+    const statusNode = document.getElementById("status");
+    const whoNode = document.getElementById("who");
+    const moodButtons = Array.from(document.querySelectorAll("button[data-mood]"));
+
+    function setStatus(ok, text) {
+      statusNode.className = ok ? "ok" : "bad";
+      statusNode.textContent = text;
+    }
+
+    function setButtonsEnabled(enabled) {
+      moodButtons.forEach((btn) => { btn.disabled = !enabled; });
+    }
+
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      const text = await res.text();
+      let body = text;
+      try { body = JSON.parse(text); } catch (_) {}
+      return { ok: res.ok, status: res.status, body };
+    }
+
+    async function onGoogleCredential(response) {
+      try {
+        googleToken = response.credential || "";
+        if (!googleToken) {
+          setStatus(false, "Google token mancante");
+          return;
+        }
+
+        const verify = await api("/auth/google/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_token: googleToken }),
+        });
+
+        if (!verify.ok) {
+          setStatus(false, `Login non valido (${verify.status})`);
+          setButtonsEnabled(false);
+          return;
+        }
+
+        whoNode.textContent = `Logged in: ${verify.body.email}`;
+        setButtonsEnabled(true);
+        setStatus(true, "Login OK. Ora puoi registrare il mood.");
+      } catch (err) {
+        setStatus(false, "Errore login Google: " + (err.message || String(err)));
+      }
+    }
+
+    async function submitMood(value) {
+      if (!googleToken) {
+        setStatus(false, "Devi fare login Google prima");
+        return;
+      }
+
+      const result = await api("/things/mood-quick", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${googleToken}`,
+        },
+        body: JSON.stringify({ value_num: value }),
+      });
+
+      if (!result.ok) {
+        setStatus(false, `Mood ${value} fallito (${result.status}): ${JSON.stringify(result.body)}`);
+        return;
+      }
+
+      const id = result.body.id || "n/a";
+      setStatus(true, `Mood ${value} salvato. id=${id}`);
+    }
+
+    moodButtons.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const value = Number(btn.getAttribute("data-mood"));
+        await submitMood(value);
+      });
+    });
+
+    async function bootstrapGoogle() {
+      const cfg = await api("/auth/google/client-id", { method: "GET" });
+      const clientId = cfg.ok ? cfg.body.client_id : "";
+
+      if (!clientId) {
+        setStatus(false, "GOOGLE_CLIENT_ID non configurato lato server");
+        return;
+      }
+
+      if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+        setStatus(false, "Libreria Google non caricata");
+        return;
+      }
+
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: onGoogleCredential,
+      });
+
+      google.accounts.id.renderButton(document.getElementById("googleSignIn"), {
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+      });
+    }
+
+    window.addEventListener("load", () => {
+      setButtonsEnabled(false);
+      setStatus(true, "In attesa login Google...");
+      setTimeout(bootstrapGoogle, 200);
+    });
+  </script>
+</body>
+</html>
