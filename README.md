@@ -67,6 +67,7 @@ http://127.0.0.1:8000/mood.html
 ```
 
 Then login with Google and click mood `1..5`.
+Main home is also available on `/` with mood + generic quick form.
 
 ### Trigger weekly report
 

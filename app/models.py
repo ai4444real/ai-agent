@@ -59,6 +59,11 @@ class MoodQuickRequest(BaseModel):
     value_num: int = Field(ge=1, le=5)
 
 
+class TextQuickRequest(BaseModel):
+    type: str = Field(min_length=1)
+    value_text: str = Field(min_length=1)
+
+
 class GoogleVerifyRequest(BaseModel):
     id_token: str = Field(min_length=10)
 

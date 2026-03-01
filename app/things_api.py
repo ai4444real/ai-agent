@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.auth_google import require_google_user
-from app.models import MoodQuickRequest, ThingCreateRequest, ThingResponse
+from app.models import MoodQuickRequest, TextQuickRequest, ThingCreateRequest, ThingResponse
 from app.services.supabase_repo import SupabaseRepo
 
 router = APIRouter(prefix="/things", tags=["things"])
@@ -36,6 +36,19 @@ def create_mood_quick(payload: MoodQuickRequest, google_user: dict = Depends(req
             "type": "mood",
             "value_num": payload.value_num,
             "meta": {"source": "mood_quick", "google_email": google_user.get("email")},
+        }
+    )
+    return ThingResponse(**inserted)
+
+
+@router.post("/text-quick", response_model=ThingResponse)
+def create_text_quick(payload: TextQuickRequest, google_user: dict = Depends(require_google_user)) -> ThingResponse:
+    repo = SupabaseRepo()
+    inserted = repo.insert_thing(
+        {
+            "type": payload.type,
+            "value_text": payload.value_text,
+            "meta": {"source": "text_quick", "google_email": google_user.get("email")},
         }
     )
     return ThingResponse(**inserted)

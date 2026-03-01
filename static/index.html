@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Accountability Agent</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --ok: #0f766e;
+      --bad: #b91c1c;
+      --accent: #0b57d0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top left, #dbeafe, var(--bg) 45%);
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 28px auto;
+      padding: 0 16px 28px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin: 0 0 8px; font-size: 18px; }
+    p { margin: 0; color: var(--muted); }
+    .nav {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .thing-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .thing {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .thing small { color: var(--muted); }
+    #googleSignIn { margin-top: 10px; }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    input {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px;
+      font-size: 14px;
+    }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    #status {
+      margin-top: 8px;
+      min-height: 22px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    @media (max-width: 820px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Accountability Agent</h1>
+      <p>Home operativa. Da qui registri mood ora, e aggiungiamo nuove "things" senza cambiare pagina.</p>
+      <div class="nav">
+        <a class="pill" href="/health">/health</a>
+        <a class="pill" href="/health.html">health runner</a>
+        <a class="pill" href="/mood.html">mood page legacy</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Things</h2>
+        <p>Catalogo rapido delle registrazioni previste.</p>
+        <div class="thing-list">
+          <div class="thing"><strong>Mood</strong><br /><small>Attivo ora: click 1..5</small></div>
+          <div class="thing"><strong>Energy</strong><br /><small>Placeholder (next)</small></div>
+          <div class="thing"><strong>Focus</strong><br /><small>Placeholder (next)</small></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Mood Quick</h2>
+        <p>Login Google richiesto.</p>
+        <div id="who" class="pill" style="margin-top:8px;">Not logged in</div>
+        <div id="googleSignIn"></div>
+        <div class="row">
+          <button data-mood="1" disabled>1</button>
+          <button data-mood="2" disabled>2</button>
+          <button data-mood="3" disabled>3</button>
+          <button data-mood="4" disabled>4</button>
+          <button data-mood="5" disabled>5</button>
+        </div>
+        <div class="form-row">
+          <h2 style="margin-top:10px;">Generic Quick</h2>
+          <p>Track qualsiasi cosa: `type` + `text`.</p>
+          <input id="genericType" placeholder="type (es: note, workout, focus)" disabled />
+          <input id="genericText" placeholder="text value" disabled />
+          <button id="genericSubmit" disabled>Save Generic</button>
+        </div>
+        <div id="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let googleToken = "";
+
+    const whoNode = document.getElementById("who");
+    const statusNode = document.getElementById("status");
+    const moodButtons = Array.from(document.querySelectorAll("button[data-mood]"));
+    const genericType = document.getElementById("genericType");
+    const genericText = document.getElementById("genericText");
+    const genericSubmit = document.getElementById("genericSubmit");
+
+    function setStatus(ok, text) {
+      statusNode.className = ok ? "ok" : "bad";
+      statusNode.textContent = text;
+    }
+
+    function setButtonsEnabled(enabled) {
+      moodButtons.forEach((btn) => { btn.disabled = !enabled; });
+      genericType.disabled = !enabled;
+      genericText.disabled = !enabled;
+      genericSubmit.disabled = !enabled;
+    }
+
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      const text = await res.text();
+      let body = text;
+      try { body = JSON.parse(text); } catch (_) {}
+      return { ok: res.ok, status: res.status, body };
+    }
+
+    async function onGoogleCredential(response) {
+      googleToken = response.credential || "";
+      if (!googleToken) {
+        setStatus(false, "Google token mancante");
+        return;
+      }
+
+      const verify = await api("/auth/google/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: googleToken }),
+      });
+
+      if (!verify.ok) {
+        setStatus(false, `Login non valido (${verify.status})`);
+        setButtonsEnabled(false);
+        return;
+      }
+
+      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      setButtonsEnabled(true);
+      setStatus(true, "Login OK. Registra il mood.");
+    }
+
+    async function submitMood(value) {
+      if (!googleToken) {
+        setStatus(false, "Login richiesto");
+        return;
+      }
+
+      const r = await api("/things/mood-quick", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${googleToken}`,
+        },
+        body: JSON.stringify({ value_num: value }),
+      });
+
+      if (!r.ok) {
+        setStatus(false, `Mood ${value} fallito (${r.status}): ${JSON.stringify(r.body)}`);
+        return;
+      }
+
+      setStatus(true, `Mood ${value} salvato. id=${r.body.id || "n/a"}`);
+    }
+
+    async function submitGeneric() {
+      if (!googleToken) {
+        setStatus(false, "Login richiesto");
+        return;
+      }
+      const t = (genericType.value || "").trim();
+      const txt = (genericText.value || "").trim();
+      if (!t || !txt) {
+        setStatus(false, "Compila type e text");
+        return;
+      }
+
+      const r = await api("/things/text-quick", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${googleToken}`,
+        },
+        body: JSON.stringify({ type: t, value_text: txt }),
+      });
+
+      if (!r.ok) {
+        setStatus(false, `Generic save fallito (${r.status}): ${JSON.stringify(r.body)}`);
+        return;
+      }
+
+      genericText.value = "";
+      setStatus(true, `Generic salvato: type=${t}. id=${r.body.id || "n/a"}`);
+    }
+
+    moodButtons.forEach((btn) => {
+      btn.addEventListener("click", () => submitMood(Number(btn.getAttribute("data-mood"))));
+    });
+    genericSubmit.addEventListener("click", submitGeneric);
+
+    async function bootstrap() {
+      setButtonsEnabled(false);
+      const cfg = await api("/auth/google/client-id", { method: "GET" });
+      const clientId = cfg.ok ? cfg.body.client_id : "";
+
+      if (!clientId) {
+        setStatus(false, "GOOGLE_CLIENT_ID non configurato");
+        return;
+      }
+      if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+        setStatus(false, "Libreria Google non caricata");
+        return;
+      }
+
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: onGoogleCredential,
+      });
+      google.accounts.id.renderButton(document.getElementById("googleSignIn"), {
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+      });
+      setStatus(true, "In attesa login Google...");
+    }
+
+    window.addEventListener("load", () => setTimeout(bootstrap, 200));
+  </script>
+</body>
+</html>
