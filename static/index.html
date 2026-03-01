@@ -52,6 +52,46 @@
       text-decoration: none;
       font-size: 12px;
     }
+    .row {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .auth-state {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: #fff;
+    }
+    .auth-state.in {
+      border-color: #0f766e;
+      background: #ecfdf5;
+      color: #065f46;
+      font-weight: 700;
+    }
+    .auth-state.out {
+      border-color: #fca5a5;
+      background: #fff1f2;
+      color: #991b1b;
+      font-weight: 700;
+    }
+    .small-btn {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .small-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
     .tracker-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -141,6 +181,15 @@
       color: #065f46;
       font-weight: 700;
     }
+    .generic-input {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      min-width: 170px;
+      background: #fff;
+      color: var(--text);
+    }
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -159,7 +208,11 @@
     <div class="card">
       <h2>Login</h2>
       <p>Google login richiesto per registrare cose.</p>
-      <div id="who" class="pill" style="margin-top:8px;">Not logged in</div>
+      <div class="row">
+        <div id="who" class="pill">Not logged in</div>
+        <div id="authState" class="auth-state out">Logged OUT</div>
+        <button id="logoutBtn" class="small-btn" type="button" disabled>Logout</button>
+      </div>
       <div id="googleSignIn"></div>
     </div>
 
@@ -172,6 +225,16 @@
         <button id="undoBtn" class="undo-btn" type="button" title="Undo last insert">X</button>
       </div>
       <div id="trackers" class="tracker-grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Generic entry</h2>
+      <p>Registra una nota libera con type + text value.</p>
+      <div class="row">
+        <input id="genericType" class="generic-input" placeholder="type (es. note)" />
+        <input id="genericValue" class="generic-input" placeholder="text value" style="min-width:260px;" />
+        <button id="genericSaveBtn" class="small-btn" type="button" disabled>Save generic</button>
+      </div>
     </div>
   </div>
 
@@ -199,12 +262,18 @@
     let trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
 
     const whoNode = document.getElementById("who");
+    const authStateNode = document.getElementById("authState");
+    const logoutBtn = document.getElementById("logoutBtn");
     const statusNode = document.getElementById("status");
     const trackersNode = document.getElementById("trackers");
     const yesterdayToggle = document.getElementById("yesterdayToggle");
     const lastCreatedRow = document.getElementById("lastCreatedRow");
     const lastCreatedText = document.getElementById("lastCreatedText");
     const undoBtn = document.getElementById("undoBtn");
+    const genericTypeNode = document.getElementById("genericType");
+    const genericValueNode = document.getElementById("genericValue");
+    const genericSaveBtn = document.getElementById("genericSaveBtn");
+    const googleSignInNode = document.getElementById("googleSignIn");
     let lastCreatedId = null;
 
     function setStatus(ok, text) {
@@ -216,6 +285,58 @@
       document.querySelectorAll(".choice-btn").forEach((btn) => {
         btn.disabled = !enabled;
       });
+      genericTypeNode.disabled = !enabled;
+      genericValueNode.disabled = !enabled;
+      genericSaveBtn.disabled = !enabled;
+      logoutBtn.disabled = !enabled;
+    }
+
+    function setAuthState(email) {
+      if (email) {
+        whoNode.textContent = `Logged in: ${email}`;
+        authStateNode.textContent = "Logged IN";
+        authStateNode.className = "auth-state in";
+        googleSignInNode.style.display = "none";
+        return;
+      }
+      whoNode.textContent = "Not logged in";
+      authStateNode.textContent = "Logged OUT";
+      authStateNode.className = "auth-state out";
+      googleSignInNode.style.display = "block";
+    }
+
+    async function submitGenericText() {
+      if (!googleToken) {
+        setStatus(false, "Login richiesto");
+        return;
+      }
+      const type = (genericTypeNode.value || "").trim();
+      const valueText = (genericValueNode.value || "").trim();
+      if (!type || !valueText) {
+        setStatus(false, "Compila type e text value.");
+        return;
+      }
+      genericSaveBtn.disabled = true;
+      const r = await api("/things/text-quick", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${googleToken}`
+        },
+        body: JSON.stringify({ type: type, value_text: valueText })
+      });
+      genericSaveBtn.disabled = false;
+      if (!r.ok) {
+        setStatus(false, `Generic save failed (${r.status}): ${JSON.stringify(r.body)}`);
+        return;
+      }
+      setStatus(true, `${type}:${valueText} salvato. id=${r.body.id || "n/a"}`);
+      if (r.body.id) {
+        lastCreatedId = r.body.id;
+        lastCreatedText.textContent = `last: ${type}:${valueText} id=${r.body.id}`;
+        lastCreatedRow.style.display = "flex";
+      }
+      genericValueNode.value = "";
     }
 
     async function api(path, options) {
@@ -433,13 +554,14 @@
       if (!verify.ok) {
         setStatus(false, `Login non valido (${verify.status})`);
         setChoiceButtonsEnabled(false);
+        setAuthState(null);
         localStorage.removeItem(TOKEN_STORAGE_KEY);
         return;
       }
 
       googleToken = token;
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      setAuthState(verify.body.email);
       await loadTrackerConfigFromServer();
       setChoiceButtonsEnabled(true);
       setStatus(true, "Login OK. Seleziona una scelta da un tracker.");
@@ -457,14 +579,25 @@
       });
       if (!verify.ok) {
         localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setAuthState(null);
         return false;
       }
       googleToken = stored;
-      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      setAuthState(verify.body.email);
       await loadTrackerConfigFromServer();
       setChoiceButtonsEnabled(true);
       setStatus(true, "Sessione ripristinata.");
       return true;
+    }
+
+    function logout() {
+      googleToken = "";
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
+      renderTrackers();
+      setChoiceButtonsEnabled(false);
+      setAuthState(null);
+      setStatus(true, "Logout eseguito.");
     }
 
     async function bootstrap() {
@@ -495,6 +628,7 @@
       });
       const restored = await tryStoredLogin();
       if (!restored) {
+        setAuthState(null);
         setStatus(true, "In attesa login Google...");
       }
     }
@@ -505,6 +639,8 @@
         useYesterday = !useYesterday;
         renderYesterdayToggle();
       });
+      genericSaveBtn.addEventListener("click", submitGenericText);
+      logoutBtn.addEventListener("click", logout);
       renderYesterdayToggle();
       setTimeout(bootstrap, 200);
     });
