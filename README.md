@@ -63,11 +63,10 @@ curl "http://127.0.0.1:8000/things?type=mood"
 Open:
 
 ```text
-http://127.0.0.1:8000/mood.html
+http://127.0.0.1:8000/
 ```
 
-Then login with Google and click mood `1..5`.
-Main home is also available on `/` with mood + generic quick form.
+Then login with Google and use the tracker cards.
 Home is now config-driven: trackers are defined in `static/index.html` (`TRACKER_CONFIGS`) and choices post to `/things/choice-quick`.
 
 ### Trigger weekly report

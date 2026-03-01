@@ -54,14 +54,14 @@
     }
     .tracker-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 8px;
       margin-top: 10px;
     }
     .tracker {
       border: 1px solid var(--line);
       border-radius: 10px;
-      padding: 10px;
+      padding: 8px;
       background: #fff;
     }
     .choices {
@@ -72,13 +72,13 @@
     }
     .choice-btn {
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 8px;
       background: #fff;
-      padding: 10px;
-      font-size: 14px;
-      font-weight: 700;
+      padding: 8px 9px;
+      font-size: 12px;
+      font-weight: 600;
       cursor: pointer;
-      min-width: 44px;
+      min-width: 36px;
     }
     .choice-btn:disabled {
       opacity: .45;
@@ -107,11 +107,9 @@
   <div class="wrap">
     <div class="card">
       <h1>Accountability Agent</h1>
-      <p>Home configurabile: definisci tracker in JSON e li registri con un click.</p>
       <div class="nav">
         <a class="pill" href="/health">/health</a>
         <a class="pill" href="/health.html">health runner</a>
-        <a class="pill" href="/mood.html">mood page legacy</a>
       </div>
     </div>
 
@@ -120,12 +118,11 @@
       <p>Google login richiesto per registrare cose.</p>
       <div id="who" class="pill" style="margin-top:8px;">Not logged in</div>
       <div id="googleSignIn"></div>
-      <div id="status"></div>
     </div>
 
     <div class="card">
       <h2>Trackers (JSON Config)</h2>
-      <p>Aggiungi tracker modificando l'array `TRACKER_CONFIGS` in questa pagina.</p>
+      <div id="status"></div>
       <div id="trackers" class="tracker-grid"></div>
     </div>
   </div>
@@ -141,33 +138,73 @@
         title: "Mood",
         valueKind: "num",
         choices: [
-          { value: 1, label: "1" },
-          { value: 2, label: "2" },
-          { value: 3, label: "3" },
-          { value: 4, label: "4" },
-          { value: 5, label: "5" }
+          { value: 1, label: "1", icon: "😡" },
+          { value: 2, label: "2", icon: "😢" },
+          { value: 3, label: "3", icon: "😐" },
+          { value: 4, label: "4", icon: "🙂" },
+          { value: 5, label: "5", icon: "😌" }
         ]
       },
       {
-        type: "training",
-        title: "Training",
-        valueKind: "num",
-        choices: [
-          { value: 1, label: "1" },
-          { value: 2, label: "2" },
-          { value: 3, label: "3" },
-          { value: 4, label: "4" },
-          { value: 5, label: "5" }
-        ]
-      },
-      {
-        type: "meal",
-        title: "Meal",
+        type: "pasti",
+        title: "Pasti",
         valueKind: "text",
         choices: [
-          { value: "few", label: "Few", icon: "🥗" },
-          { value: "middle", label: "Middle", icon: "🍽️" },
-          { value: "high", label: "High", icon: "🍱" }
+          { value: "poco", label: "Poco", icon: "🥗" },
+          { value: "giusto", label: "Giusto", icon: "🍽️" },
+          { value: "tanto", label: "Tanto", icon: "🍲" },
+          { value: "tantissimo", label: "Tantissimo", icon: "🍕" }
+        ]
+      },
+      {
+        type: "acqua",
+        title: "Acqua",
+        valueKind: "text",
+        choices: [
+          { value: "piccolo", label: "Piccolo", icon: "💧" },
+          { value: "medio", label: "Medio", icon: "🚰" },
+          { value: "grande", label: "Grande", icon: "🫗" }
+        ]
+      },
+      {
+        type: "caffe",
+        title: "Caffe",
+        valueKind: "text",
+        choices: [
+          { value: "corto", label: "Corto", icon: "☕" },
+          { value: "lungo", label: "Lungo", icon: "🥤" }
+        ]
+      },
+      {
+        type: "allenamento",
+        title: "Allenamento",
+        valueKind: "text",
+        choices: [
+          { value: "male", label: "Male", icon: "😮‍💨" },
+          { value: "medio", label: "Medio", icon: "😐" },
+          { value: "bene", label: "Bene", icon: "💪" }
+        ]
+      },
+      {
+        type: "alcool",
+        title: "Alcool",
+        valueKind: "text",
+        choices: [
+          { value: "shot", label: "Shot", icon: "🥃" },
+          { value: "birra", label: "Birra", icon: "🍺" },
+          { value: "vino", label: "Vino", icon: "🍷" },
+          { value: "aperitivo", label: "Aperitivo", icon: "🍸" },
+          { value: "pinta", label: "Pinta", icon: "🍻" },
+          { value: "superalcolico", label: "Super", icon: "🧉" }
+        ]
+      },
+      {
+        type: "tentazione",
+        title: "Tentazione",
+        valueKind: "text",
+        choices: [
+          { value: "vinto", label: "Vinto", icon: "😎" },
+          { value: "perso", label: "Perso", icon: "😔" }
         ]
       }
     ];
@@ -209,9 +246,6 @@
         const title = document.createElement("h3");
         title.textContent = cfg.title;
 
-        const meta = document.createElement("p");
-        meta.textContent = `type=${cfg.type} | valueKind=${cfg.valueKind}`;
-
         const choices = document.createElement("div");
         choices.className = "choices";
 
@@ -233,7 +267,6 @@
         });
 
         tracker.appendChild(title);
-        tracker.appendChild(meta);
         tracker.appendChild(choices);
         trackersNode.appendChild(tracker);
       });

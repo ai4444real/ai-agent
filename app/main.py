@@ -33,12 +33,6 @@ def index_html_alias() -> FileResponse:
 def health_html() -> FileResponse:
     return FileResponse(static_dir / "health.html")
 
-
-@app.get("/mood.html", include_in_schema=False)
-def mood_html() -> FileResponse:
-    return FileResponse(static_dir / "mood.html")
-
-
 app.include_router(things_router)
 app.include_router(actions_router)
 app.include_router(auth_router)
