@@ -20,6 +20,7 @@
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
     .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .pill { border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: 12px; color: var(--muted); }
+    .row { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     h1 { margin: 0; font-size: 22px; }
     h2 { margin: 0 0 8px; font-size: 16px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
@@ -32,6 +33,38 @@
     #status { font-family: Consolas, monospace; font-size: 12px; min-height: 20px; margin-top: 6px; }
     .ok { color: var(--ok); }
     .bad { color: var(--bad); }
+    .auth-state {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: #fff;
+    }
+    .auth-state.in {
+      border-color: #0f766e;
+      background: #ecfdf5;
+      color: #065f46;
+      font-weight: 700;
+    }
+    .auth-state.out {
+      border-color: #fca5a5;
+      background: #fff1f2;
+      color: #991b1b;
+      font-weight: 700;
+    }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -43,9 +76,13 @@
         <a class="pill" href="/">home</a>
         <a class="pill" href="/my-rules.html">my rules</a>
         <a class="pill" href="/health.html">health runner</a>
-        <span id="who" class="pill">Not logged in</span>
       </div>
-      <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <div class="row">
+        <span id="who" class="pill">Not logged in</span>
+        <span id="authState" class="auth-state out">Logged OUT</span>
+        <button id="logoutBtn" type="button" disabled>Logout</button>
+      </div>
+      <div class="row">
         <label for="days" class="k">Window days</label>
         <input id="days" type="number" min="1" max="31" value="8" style="width:80px; padding:6px;" />
         <button id="refresh">Refresh</button>
@@ -80,6 +117,25 @@
     const TOKEN_STORAGE_KEY = "aa_google_id_token";
     const statusNode = document.getElementById("status");
     const whoNode = document.getElementById("who");
+    const authStateNode = document.getElementById("authState");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const googleSignInNode = document.getElementById("googleSignIn");
+
+    function setAuthState(email) {
+      if (email) {
+        whoNode.textContent = `Logged in: ${email}`;
+        authStateNode.textContent = "Logged IN";
+        authStateNode.className = "auth-state in";
+        googleSignInNode.style.display = "none";
+        logoutBtn.disabled = false;
+        return;
+      }
+      whoNode.textContent = "Not logged in";
+      authStateNode.textContent = "Logged OUT";
+      authStateNode.className = "auth-state out";
+      googleSignInNode.style.display = "block";
+      logoutBtn.disabled = true;
+    }
 
     function setStatus(ok, txt) {
       statusNode.className = ok ? "ok" : "bad";
@@ -162,11 +218,12 @@
       if (!verify.ok) {
         setStatus(false, "Google login failed");
         localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setAuthState(null);
         return;
       }
       googleToken = token;
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      setAuthState(verify.body.email);
       await loadSummary();
     }
 
@@ -182,16 +239,23 @@
       });
       if (!verify.ok) {
         localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setAuthState(null);
         return false;
       }
       googleToken = stored;
-      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      setAuthState(verify.body.email);
       await loadSummary();
       return true;
     }
 
+    function logout() {
+      googleToken = "";
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      setAuthState(null);
+      setStatus(true, "Logout eseguito.");
+    }
+
     async function bootstrap() {
-      document.getElementById("refresh").addEventListener("click", loadSummary);
       const cfg = await api("/auth/google/client-id", { method: "GET" });
       const clientId = cfg.ok ? cfg.body.client_id : "";
       if (!clientId) {
@@ -202,11 +266,16 @@
       google.accounts.id.renderButton(document.getElementById("googleSignIn"), { theme: "outline", size: "large" });
       const restored = await tryStoredLogin();
       if (!restored) {
+        setAuthState(null);
         setStatus(true, "Waiting for Google login...");
       }
     }
 
-    window.addEventListener("load", bootstrap);
+    window.addEventListener("load", () => {
+      document.getElementById("refresh").addEventListener("click", loadSummary);
+      logoutBtn.addEventListener("click", logout);
+      bootstrap();
+    });
   </script>
 </body>
 </html>

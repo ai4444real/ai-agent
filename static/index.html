@@ -218,7 +218,10 @@
 
     <div class="card">
       <h2>Trackers (JSON Config)</h2>
-      <button id="yesterdayToggle" class="toggle" type="button">Yesterday: OFF</button>
+      <div class="row">
+        <button id="yesterdayToggle" class="toggle" type="button">Yesterday: OFF</button>
+        <button id="runMyReportBtn" class="small-btn" type="button" disabled>Run my weekly report</button>
+      </div>
       <div id="status"></div>
       <div id="lastCreatedRow" class="last-created" style="display:none;">
         <span id="lastCreatedText"></span>
@@ -267,6 +270,7 @@
     const statusNode = document.getElementById("status");
     const trackersNode = document.getElementById("trackers");
     const yesterdayToggle = document.getElementById("yesterdayToggle");
+    const runMyReportBtn = document.getElementById("runMyReportBtn");
     const lastCreatedRow = document.getElementById("lastCreatedRow");
     const lastCreatedText = document.getElementById("lastCreatedText");
     const undoBtn = document.getElementById("undoBtn");
@@ -289,6 +293,27 @@
       genericValueNode.disabled = !enabled;
       genericSaveBtn.disabled = !enabled;
       logoutBtn.disabled = !enabled;
+      runMyReportBtn.disabled = !enabled;
+    }
+
+    async function runMyWeeklyReport() {
+      if (!googleToken) {
+        setStatus(false, "Login richiesto");
+        return;
+      }
+      runMyReportBtn.disabled = true;
+      const r = await api("/actions/weekly-report-mine", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${googleToken}`
+        }
+      });
+      runMyReportBtn.disabled = false;
+      if (!r.ok) {
+        setStatus(false, `Report failed (${r.status}): ${JSON.stringify(r.body)}`);
+        return;
+      }
+      setStatus(true, `Report lanciato. run_id=${r.body.run_id || "n/a"}`);
     }
 
     function setAuthState(email) {
@@ -641,6 +666,7 @@
       });
       genericSaveBtn.addEventListener("click", submitGenericText);
       logoutBtn.addEventListener("click", logout);
+      runMyReportBtn.addEventListener("click", runMyWeeklyReport);
       renderYesterdayToggle();
       setTimeout(bootstrap, 200);
     });
