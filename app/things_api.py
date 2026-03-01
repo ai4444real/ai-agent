@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from app.actions.weekly_report import compute_week_window_utc
 from app.auth_google import require_google_user
-from app.models import ChoiceQuickRequest, MoodQuickRequest, TextQuickRequest, ThingCreateRequest, ThingResponse
+from app.models import ChoiceQuickRequest, MoodQuickRequest, TextQuickRequest, ThingResponse
 from app.services.supabase_repo import SupabaseRepo
 from app.settings import get_settings
 
@@ -30,25 +30,7 @@ def _owner_fields(google_user: dict) -> dict:
     }
 
 
-@router.post("", response_model=ThingResponse)
-def create_thing(payload: ThingCreateRequest) -> ThingResponse:
-    repo = SupabaseRepo()
-    inserted = repo.insert_thing(payload.model_dump(mode="json", exclude_none=True))
-    return ThingResponse(**inserted)
-
-
-@router.get("", response_model=list[ThingResponse])
-def list_things(
-    type: str | None = None,
-    from_ts: Annotated[datetime | None, Query(alias="from")] = None,
-    to_ts: Annotated[datetime | None, Query(alias="to")] = None,
-) -> list[ThingResponse]:
-    repo = SupabaseRepo()
-    rows = repo.list_things(thing_type=type, from_ts=from_ts, to_ts=to_ts)
-    return [ThingResponse(**row) for row in rows]
-
-
-@router.get("/mine", response_model=list[ThingResponse])
+@router.get("-mine", response_model=list[ThingResponse])
 def list_my_things(
     type: str | None = None,
     from_ts: Annotated[datetime | None, Query(alias="from")] = None,
@@ -65,7 +47,7 @@ def list_my_things(
     return [ThingResponse(**row) for row in rows]
 
 
-@router.delete("/mine/{thing_id}")
+@router.delete("-mine/{thing_id}")
 def delete_my_thing(thing_id: UUID, google_user: dict = Depends(require_google_user)) -> dict:
     repo = SupabaseRepo()
     owner_sub = google_user.get("sub")

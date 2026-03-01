@@ -27,7 +27,7 @@ class RepoMineStub:
 
 def test_things_mine_requires_google_auth():
     client = TestClient(app)
-    r = client.get("/things/mine")
+    r = client.get("/things-mine")
     assert r.status_code == 401
 
 
@@ -39,7 +39,7 @@ def test_things_mine_filters_by_owner(monkeypatch):
     monkeypatch.setattr(things_api, "SupabaseRepo", lambda: repo)
 
     client = TestClient(app)
-    r = client.get("/things/mine?type=mood")
+    r = client.get("/things-mine?type=mood")
 
     assert r.status_code == 200
     body = r.json()

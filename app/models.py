@@ -43,8 +43,24 @@ class ActionResponse(BaseModel):
 
 
 class WeeklyReportRequest(BaseModel):
-    owner_sub: str | None = None
+    owner_sub: str
     owner_email: str | None = None
+
+
+class DispatchItemResponse(BaseModel):
+    owner_sub: str
+    owner_email: str | None = None
+    ok: bool
+    run_id: UUID | None = None
+    error: str | None = None
+
+
+class DispatchResponse(BaseModel):
+    ok: bool
+    total: int
+    success: int
+    failed: int
+    items: list[DispatchItemResponse]
 
 
 class RunResponse(BaseModel):

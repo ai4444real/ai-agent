@@ -26,7 +26,7 @@ class RepoDeleteMineStub:
 
 def test_delete_my_thing_requires_google_auth():
     client = TestClient(app)
-    r = client.delete("/things/mine/66666666-6666-6666-6666-666666666666")
+    r = client.delete("/things-mine/66666666-6666-6666-6666-666666666666")
     assert r.status_code == 401
 
 
@@ -38,7 +38,7 @@ def test_delete_my_thing_success(monkeypatch):
     monkeypatch.setattr(things_api, "SupabaseRepo", lambda: repo)
 
     client = TestClient(app)
-    r = client.delete("/things/mine/66666666-6666-6666-6666-666666666666")
+    r = client.delete("/things-mine/66666666-6666-6666-6666-666666666666")
 
     assert r.status_code == 200
     assert r.json()["ok"] is True
@@ -55,7 +55,7 @@ def test_delete_my_thing_not_found(monkeypatch):
     monkeypatch.setattr(things_api, "SupabaseRepo", lambda: repo)
 
     client = TestClient(app)
-    r = client.delete("/things/mine/77777777-7777-7777-7777-777777777777")
+    r = client.delete("/things-mine/77777777-7777-7777-7777-777777777777")
 
     assert r.status_code == 404
 

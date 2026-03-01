@@ -45,21 +45,7 @@ curl http://127.0.0.1:8000/health
 
 ## 4) API
 
-### Insert mood
-
-```bash
-curl -X POST http://127.0.0.1:8000/things \
-  -H "Content-Type: application/json" \
-  -d '{"type":"mood","value_num":3}'
-```
-
-### List things
-
-```bash
-curl "http://127.0.0.1:8000/things?type=mood"
-```
-
-### Mood quick (Google login)
+### Tracker app (Google login)
 
 Open:
 
@@ -67,15 +53,31 @@ Open:
 http://127.0.0.1:8000/
 ```
 
-Then login with Google and use the tracker cards.
-Home is now config-driven: trackers are defined in `static/index.html` (`TRACKER_CONFIGS`) and choices post to `/things/choice-quick`.
+Then login with Google and use tracker cards.
+Home is config-driven: trackers are defined in `static/index.html` (`TRACKER_CONFIGS`) and choices post to `/things/choice-quick`.
 Weekly report uses a configurable time window (`REPORT_WINDOW_DAYS`, default `8`) and aggregates all tracked types before calling AI.
+
+### Read my things
+
+```bash
+curl "http://127.0.0.1:8000/things-mine?type=mood" \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
+```
 
 ### Trigger weekly report
 
 ```bash
 curl -X POST http://127.0.0.1:8000/actions/weekly-report \
-  -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN"
+  -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner_sub":"YOUR_OWNER_SUB","owner_email":"you@example.com"}'
+```
+
+### Trigger my weekly report
+
+```bash
+curl -X POST http://127.0.0.1:8000/actions/weekly-report-mine \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
 ```
 
 ### Read latest runs
@@ -85,20 +87,20 @@ curl "http://127.0.0.1:8000/actions/runs/latest?limit=10" \
   -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN"
 ```
 
-### Report rules config (single text block)
+### Report rules config (per user)
 
 Get:
 
 ```bash
-curl "http://127.0.0.1:8000/config/report-rules" \
-  -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN"
+curl "http://127.0.0.1:8000/config/report-rules-mine" \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
 ```
 
 Put:
 
 ```bash
-curl -X PUT "http://127.0.0.1:8000/config/report-rules" \
-  -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN" \
+curl -X PUT "http://127.0.0.1:8000/config/report-rules-mine" \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text":"your long report rules here"}'
 ```
@@ -112,7 +114,7 @@ curl -X PUT "http://127.0.0.1:8000/config/report-rules" \
 
 ## 6) Scheduler on cron-job.org
 
-- URL: `https://<render-app>/actions/weekly-report`
+- URL: `https://<render-app>/actions/weekly-report-dispatch`
 - Method: `POST`
 - Header: `X-Trigger-Token: <TRIGGER_TOKEN>`
 - Header: `Content-Type: application/json`
@@ -121,15 +123,12 @@ curl -X PUT "http://127.0.0.1:8000/config/report-rules" \
 
 ## MVP included
 
-- `POST /things`
-- `GET /things`
-- `POST /actions/weekly-report`
+- `POST /things/choice-quick`
+- `GET /things-mine`
+- `POST /actions/weekly-report-mine`
+- `POST /actions/weekly-report-dispatch`
 - `GET /health`
 - Logging on `runs` and `messages`
-
-## Existing Deploy Note
-
-If your Supabase was created before `app_config`, run the updated SQL in `schema.sql` to add the `app_config` table.
 
 ## Not in MVP
 

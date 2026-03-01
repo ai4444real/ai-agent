@@ -4,6 +4,7 @@ from fastapi import Header, HTTPException, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
+from app.services.supabase_repo import SupabaseRepo
 from app.settings import get_settings
 
 
@@ -45,4 +46,13 @@ def require_google_user(authorization: str | None = Header(default=None, alias="
     token = authorization.split(" ", 1)[1].strip()
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Google bearer token")
-    return verify_google_token(token)
+    claims = verify_google_token(token)
+    owner_sub = claims.get("sub")
+    owner_email = claims.get("email")
+    if owner_sub:
+        try:
+            SupabaseRepo().upsert_user(owner_sub=owner_sub, owner_email=owner_email, active=True)
+        except Exception:
+            # User upsert should not block request auth path.
+            pass
+    return claims

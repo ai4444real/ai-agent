@@ -13,7 +13,7 @@ from app.actions.weekly_report import (
 )
 from app.auth import require_trigger_token
 from app.auth_google import require_google_user
-from app.models import ActionResponse, RunResponse, WeeklyReportRequest
+from app.models import ActionResponse, DispatchItemResponse, DispatchResponse, RunResponse, WeeklyReportRequest
 from app.services.llm_openai import OpenAIReportHelper
 from app.services.mailer_brevo_smtp import BrevoMailer
 from app.services.supabase_repo import SupabaseRepo
@@ -23,35 +23,16 @@ router = APIRouter(prefix="/actions", tags=["actions"])
 mailer = BrevoMailer()
 
 
-@router.get("/runs/latest", response_model=list[RunResponse], dependencies=[Depends(require_trigger_token)])
-def latest_runs(limit: int = Query(default=10, ge=1, le=50)) -> list[RunResponse]:
-    repo = SupabaseRepo()
-    rows = repo.list_latest_runs(limit=limit)
-    return [RunResponse(**row) for row in rows]
-
-
-@router.post("/weekly-report-mine", response_model=ActionResponse)
-async def weekly_report_mine(google_user: dict = Depends(require_google_user)) -> ActionResponse:
-    payload = WeeklyReportRequest(
-        owner_sub=google_user.get("sub"),
-        owner_email=google_user.get("email"),
-    )
-    return await weekly_report_action(payload=payload)
-
-
-@router.post("/weekly-report", response_model=ActionResponse, dependencies=[Depends(require_trigger_token)])
-async def weekly_report_action(payload: WeeklyReportRequest | None = None) -> ActionResponse:
+async def _run_weekly_report_for_owner(owner_sub: str, owner_email: str | None) -> ActionResponse:
     repo = SupabaseRepo()
     settings = get_settings()
     window_days = getattr(settings, "report_window_days", 8)
     llm_helper = OpenAIReportHelper()
-    owner_sub = payload.owner_sub if payload else None
-    owner_email = payload.owner_email if payload else None
     start_utc, end_utc = compute_week_window_utc(window_days=window_days)
     run = repo.create_run(
         action="weekly_report",
         input_summary={"from": start_utc.isoformat(), "to": end_utc.isoformat(), "window_days": window_days},
-        owner_sub=owner_sub or "system",
+        owner_sub=owner_sub,
         owner_email=owner_email or settings.mail_to,
     )
     run_id = run["id"]
@@ -60,13 +41,7 @@ async def weekly_report_action(payload: WeeklyReportRequest | None = None) -> Ac
         rows = repo.list_things(from_ts=start_utc, to_ts=end_utc, owner_sub=owner_sub)
         mood_rows = [row for row in rows if (row.get("type") or "").strip().lower() == "mood"]
         values = extract_mood_values(list(reversed(mood_rows)))
-        rules_source = "global"
-        rules_text = None
-        if owner_sub:
-            rules_text = repo.get_user_report_rules(owner_sub)
-            rules_source = "user" if rules_text else "global_fallback"
-        if rules_text is None:
-            rules_text = repo.get_config_text("report_rules")
+        rules_text = repo.get_user_report_rules(owner_sub)
         tracker_summary = summarize_tracker_activity(rows)
 
         metrics = calculate_metrics(values)
@@ -83,7 +58,7 @@ async def weekly_report_action(payload: WeeklyReportRequest | None = None) -> Ac
             "report_payload": report_payload,
             "rules_excerpt": (rules_text or "")[:1000],
             "rules_length": len(rules_text or ""),
-            "rules_source": rules_source,
+            "rules_source": "user_only",
         }
         repo.update_run_input_summary(run_id=run_id, input_summary=debug_summary)
         summary, signal, micro_action = deterministic_signal_and_action(metrics)
@@ -97,7 +72,7 @@ async def weekly_report_action(payload: WeeklyReportRequest | None = None) -> Ac
         body += f"\n\nTracker snapshot ({window_days}d):\n{render_tracker_snapshot(tracker_summary)}"
         if rules_text:
             body += f"\n\nRules context excerpt:\n{rules_text[:300]}"
-        body += f"\n\nRules source: {rules_source}"
+        body += "\n\nRules source: user_only"
 
         subject = f"Weekly mood report - {datetime.now(timezone.utc).date().isoformat()}"
         report_recipient = owner_email or settings.mail_to
@@ -110,7 +85,7 @@ async def weekly_report_action(payload: WeeklyReportRequest | None = None) -> Ac
             body=body,
             action="weekly_report",
             run_id=run_id,
-            owner_sub=owner_sub or "system",
+            owner_sub=owner_sub,
             owner_email=owner_email or settings.mail_to,
         )
         repo.finish_run(run_id=run_id, status="success")
@@ -129,9 +104,68 @@ async def weekly_report_action(payload: WeeklyReportRequest | None = None) -> Ac
                 body=alert_body,
                 action="weekly_report_fail_alert",
                 run_id=run_id,
-                owner_sub=owner_sub or "system",
+                owner_sub=owner_sub,
                 owner_email=owner_email or settings.mail_to,
             )
         except Exception:
             pass
         raise HTTPException(status_code=500, detail="weekly_report failed") from exc
+
+
+@router.get("/runs/latest", response_model=list[RunResponse], dependencies=[Depends(require_trigger_token)])
+def latest_runs(limit: int = Query(default=10, ge=1, le=50)) -> list[RunResponse]:
+    repo = SupabaseRepo()
+    rows = repo.list_latest_runs(limit=limit)
+    return [RunResponse(**row) for row in rows]
+
+
+@router.post("/weekly-report-mine", response_model=ActionResponse)
+async def weekly_report_mine(google_user: dict = Depends(require_google_user)) -> ActionResponse:
+    return await _run_weekly_report_for_owner(
+        owner_sub=google_user.get("sub"),
+        owner_email=google_user.get("email"),
+    )
+
+
+@router.post("/weekly-report", response_model=ActionResponse, dependencies=[Depends(require_trigger_token)])
+async def weekly_report_action(payload: WeeklyReportRequest) -> ActionResponse:
+    return await _run_weekly_report_for_owner(
+        owner_sub=payload.owner_sub,
+        owner_email=payload.owner_email,
+    )
+
+
+@router.post("/weekly-report-dispatch", response_model=DispatchResponse, dependencies=[Depends(require_trigger_token)])
+async def weekly_report_dispatch(limit: int = Query(default=100, ge=1, le=1000)) -> DispatchResponse:
+    repo = SupabaseRepo()
+    owners = repo.list_known_owners(limit=limit)
+    items: list[DispatchItemResponse] = []
+
+    for owner in owners:
+        owner_sub = owner.get("owner_sub")
+        owner_email = owner.get("owner_email")
+        if not owner_sub:
+            continue
+        try:
+            result = await _run_weekly_report_for_owner(owner_sub=owner_sub, owner_email=owner_email)
+            items.append(
+                DispatchItemResponse(
+                    owner_sub=owner_sub,
+                    owner_email=owner_email,
+                    ok=True,
+                    run_id=result.run_id,
+                )
+            )
+        except Exception as exc:
+            items.append(
+                DispatchItemResponse(
+                    owner_sub=owner_sub,
+                    owner_email=owner_email,
+                    ok=False,
+                    error=str(exc)[:1000],
+                )
+            )
+
+    success = len([i for i in items if i.ok])
+    failed = len(items) - success
+    return DispatchResponse(ok=failed == 0, total=len(items), success=success, failed=failed, items=items)

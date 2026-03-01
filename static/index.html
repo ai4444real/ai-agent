@@ -380,7 +380,7 @@
         return;
       }
       undoBtn.disabled = true;
-      const r = await api(`/things/mine/${lastCreatedId}`, {
+      const r = await api(`/things-mine/${lastCreatedId}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${googleToken}` },
       });

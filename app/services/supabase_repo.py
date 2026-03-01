@@ -115,23 +115,6 @@ class SupabaseRepo:
         return response.data or []
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
-    def get_config_text(self, key: str) -> str | None:
-        response = self._client.table("app_config").select("value_text").eq("key", key).limit(1).execute()
-        rows = response.data or []
-        if not rows:
-            return None
-        return rows[0].get("value_text")
-
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
-    def set_config_text(self, key: str, value_text: str) -> dict[str, Any]:
-        response = (
-            self._client.table("app_config")
-            .upsert({"key": key, "value_text": value_text}, on_conflict="key")
-            .execute()
-        )
-        return response.data[0]
-
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
     def get_user_report_rules(self, owner_sub: str) -> str | None:
         response = (
             self._client.table("user_report_rules")
@@ -160,6 +143,59 @@ class SupabaseRepo:
             .execute()
         )
         return response.data[0]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def upsert_user(self, owner_sub: str, owner_email: str | None, active: bool = True) -> dict[str, Any]:
+        response = (
+            self._client.table("users")
+            .upsert(
+                {
+                    "owner_sub": owner_sub,
+                    "owner_email": owner_email,
+                    "active": active,
+                },
+                on_conflict="owner_sub",
+            )
+            .execute()
+        )
+        return response.data[0]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def list_known_owners(self, limit: int = 1000) -> list[dict[str, Any]]:
+        owners: dict[str, str | None] = {}
+
+        users_rows = (
+            self._client.table("users")
+            .select("owner_sub,owner_email,active")
+            .eq("active", True)
+            .limit(limit)
+            .execute()
+            .data
+            or []
+        )
+        for row in users_rows:
+            owner_sub = row.get("owner_sub")
+            if not owner_sub:
+                continue
+            owners[str(owner_sub)] = row.get("owner_email")
+
+        rules_rows = self._client.table("user_report_rules").select("owner_sub,owner_email").limit(limit).execute().data or []
+        for row in rules_rows:
+            owner_sub = row.get("owner_sub")
+            if not owner_sub:
+                continue
+            owners[str(owner_sub)] = row.get("owner_email")
+
+        things_rows = self._client.table("things").select("owner_sub,owner_email").limit(limit).execute().data or []
+        for row in things_rows:
+            owner_sub = row.get("owner_sub")
+            if not owner_sub:
+                continue
+            owner_sub = str(owner_sub)
+            if owner_sub not in owners:
+                owners[owner_sub] = row.get("owner_email")
+
+        return [{"owner_sub": sub, "owner_email": email} for sub, email in owners.items()]
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
     def get_thing_by_id_owner(self, thing_id: str, owner_sub: str) -> dict[str, Any] | None:

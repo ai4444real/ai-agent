@@ -122,7 +122,11 @@ def test_weekly_report_failure_sends_alert(monkeypatch):
     monkeypatch.setattr(auth, "get_settings", lambda: SimpleNamespace(trigger_token="test-token"))
 
     client = TestClient(app)
-    r = client.post("/actions/weekly-report", headers={"X-Trigger-Token": "test-token"})
+    r = client.post(
+        "/actions/weekly-report",
+        headers={"X-Trigger-Token": "test-token"},
+        json={"owner_sub": "sub-test", "owner_email": "ops@example.com"},
+    )
 
     assert r.status_code == 500
     assert len(mailer.calls) == 2
@@ -165,3 +169,43 @@ def test_weekly_report_uses_owner_filter_when_provided(monkeypatch):
 
     assert r.status_code == 500
     assert repo.last_owner_sub == "sub-xyz"
+
+
+def test_weekly_report_dispatch_runs_for_known_owners(monkeypatch):
+    import app.actions_api as actions_api
+    import app.auth as auth
+
+    class RepoDispatchStub(RepoForWeeklyFailure):
+        def list_known_owners(self, limit: int = 1000):
+            return [
+                {"owner_sub": "sub-a", "owner_email": "a@example.com"},
+                {"owner_sub": "sub-b", "owner_email": "b@example.com"},
+            ]
+
+    repo = RepoDispatchStub()
+    mailer = FakeMailerFailThenPass()
+
+    monkeypatch.setattr(actions_api, "SupabaseRepo", lambda: repo)
+    monkeypatch.setattr(actions_api, "mailer", mailer)
+    monkeypatch.setattr(actions_api, "OpenAIReportHelper", lambda: FakeLLM())
+    monkeypatch.setattr(
+        actions_api,
+        "compute_week_window_utc",
+        lambda **kwargs: (
+            datetime(2026, 2, 22, 10, 0, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
+        ),
+    )
+    monkeypatch.setattr(
+        actions_api,
+        "get_settings",
+        lambda: SimpleNamespace(mail_to="ops@example.com", report_window_days=8),
+    )
+    monkeypatch.setattr(auth, "get_settings", lambda: SimpleNamespace(trigger_token="test-token"))
+
+    client = TestClient(app)
+    r = client.post("/actions/weekly-report-dispatch", headers={"X-Trigger-Token": "test-token"})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 2
