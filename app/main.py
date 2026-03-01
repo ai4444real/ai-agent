@@ -19,6 +19,16 @@ def health() -> HealthResponse:
     return HealthResponse(ok=True)
 
 
+@app.get("/", include_in_schema=False)
+def index_html() -> FileResponse:
+    return FileResponse(static_dir / "index.html")
+
+
+@app.get("/index.html", include_in_schema=False)
+def index_html_alias() -> FileResponse:
+    return FileResponse(static_dir / "index.html")
+
+
 @app.get("/health.html", include_in_schema=False)
 def health_html() -> FileResponse:
     return FileResponse(static_dir / "health.html")
