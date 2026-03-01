@@ -126,3 +126,11 @@ class ReportRulesRequest(BaseModel):
 
 class ReportRulesResponse(BaseModel):
     text: str | None = None
+
+
+class TrackerConfigRequest(BaseModel):
+    text: str = Field(min_length=1)
+
+
+class TrackerConfigResponse(BaseModel):
+    text: str | None = None

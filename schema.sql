@@ -66,6 +66,16 @@ create table if not exists user_report_rules (
 
 create index if not exists idx_user_report_rules_owner_email on user_report_rules (owner_email);
 
+-- USER TRACKER CONFIGS (multi-user)
+create table if not exists user_tracker_configs (
+  owner_sub text primary key,
+  owner_email text null,
+  value_text text not null,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_user_tracker_configs_owner_email on user_tracker_configs (owner_email);
+
 -- USERS (multi-user directory for dispatch and profile-level settings)
 create table if not exists users (
   owner_sub text primary key,

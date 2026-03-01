@@ -54,7 +54,7 @@ http://127.0.0.1:8000/
 ```
 
 Then login with Google and use tracker cards.
-Home is config-driven: trackers are defined in `static/index.html` (`TRACKER_CONFIGS`) and choices post to `/things/choice-quick`.
+Home is config-driven: trackers load from `/config/tracker-config-mine` (if present), otherwise fallback to default config in `static/index.html` (`DEFAULT_TRACKER_CONFIGS`). Choices post to `/things/choice-quick`.
 Weekly report uses a configurable time window (`REPORT_WINDOW_DAYS`, default `8`) and aggregates all tracked types before calling AI.
 
 ### Read my things
@@ -103,6 +103,24 @@ curl -X PUT "http://127.0.0.1:8000/config/report-rules-mine" \
   -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text":"your long report rules here"}'
+```
+
+### Tracker config (per user)
+
+Get:
+
+```bash
+curl "http://127.0.0.1:8000/config/tracker-config-mine" \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
+```
+
+Put:
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/config/tracker-config-mine" \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"[{\"type\":\"mood\",\"title\":\"Mood\",\"valueKind\":\"num\",\"choices\":[{\"value\":1,\"label\":\"1\"}]}]"}'
 ```
 
 ## 5) Deploy on Render

@@ -182,7 +182,7 @@
 
     // Configurazione centralizzata dei tracker.
     // valueKind: "num" salva su value_num, "text" salva su value_text.
-    const TRACKER_CONFIGS = [
+    const DEFAULT_TRACKER_CONFIGS = [
       {
         type: "mood",
         title: "Mood",
@@ -258,6 +258,7 @@
         ]
       }
     ];
+    let trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
 
     const whoNode = document.getElementById("who");
     const statusNode = document.getElementById("status");
@@ -294,7 +295,7 @@
 
     function renderTrackers() {
       trackersNode.innerHTML = "";
-      TRACKER_CONFIGS.forEach((cfg, cfgIndex) => {
+      trackerConfigs.forEach((cfg, cfgIndex) => {
         const tracker = document.createElement("div");
         tracker.className = "tracker";
 
@@ -400,6 +401,84 @@
       yesterdayToggle.textContent = useYesterday ? "Yesterday: ON" : "Yesterday: OFF";
     }
 
+    function normalizeTrackerConfig(raw) {
+      if (!Array.isArray(raw)) {
+        return null;
+      }
+      const normalized = [];
+      for (const cfg of raw) {
+        if (!cfg || typeof cfg !== "object") return null;
+        if (!cfg.type || !cfg.title) return null;
+        if (cfg.valueKind !== "num" && cfg.valueKind !== "text") return null;
+        if (!Array.isArray(cfg.choices) || cfg.choices.length < 1) return null;
+
+        const choices = [];
+        for (const ch of cfg.choices) {
+          if (!ch || typeof ch !== "object") return null;
+          if (ch.value === undefined || ch.value === null) return null;
+          if (!ch.label) return null;
+          choices.push({
+            value: ch.value,
+            label: String(ch.label),
+            icon: ch.icon ? String(ch.icon) : undefined,
+            image: ch.image ? String(ch.image) : undefined
+          });
+        }
+
+        normalized.push({
+          type: String(cfg.type),
+          title: String(cfg.title),
+          valueKind: cfg.valueKind,
+          choices: choices
+        });
+      }
+      return normalized;
+    }
+
+    async function loadTrackerConfigFromServer() {
+      if (!googleToken) {
+        trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
+        renderTrackers();
+        return;
+      }
+      const r = await api("/config/tracker-config-mine", {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${googleToken}` }
+      });
+      if (!r.ok) {
+        trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
+        renderTrackers();
+        setStatus(false, `Tracker config load failed (${r.status}), uso default.`);
+        return;
+      }
+      const text = (r.body && r.body.text) || "";
+      if (!text || !String(text).trim()) {
+        trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
+        renderTrackers();
+        setStatus(true, "Config tracker default (nessuna config utente salvata).");
+        return;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (_) {
+        trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
+        renderTrackers();
+        setStatus(false, "Tracker config JSON non valido, uso default.");
+        return;
+      }
+      const normalized = normalizeTrackerConfig(parsed);
+      if (!normalized || normalized.length < 1) {
+        trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
+        renderTrackers();
+        setStatus(false, "Tracker config struttura non valida, uso default.");
+        return;
+      }
+      trackerConfigs = normalized;
+      renderTrackers();
+      setStatus(true, "Tracker config utente caricata.");
+    }
+
     async function onGoogleCredential(response) {
       const token = response.credential || "";
       if (!token) {
@@ -423,6 +502,7 @@
       googleToken = token;
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
       whoNode.textContent = `Logged in: ${verify.body.email}`;
+      await loadTrackerConfigFromServer();
       setChoiceButtonsEnabled(true);
       setStatus(true, "Login OK. Seleziona una scelta da un tracker.");
     }
@@ -443,6 +523,7 @@
       }
       googleToken = stored;
       whoNode.textContent = `Logged in: ${verify.body.email}`;
+      await loadTrackerConfigFromServer();
       setChoiceButtonsEnabled(true);
       setStatus(true, "Sessione ripristinata.");
       return true;

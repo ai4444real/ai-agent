@@ -145,6 +145,36 @@ class SupabaseRepo:
         return response.data[0]
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def get_user_tracker_config(self, owner_sub: str) -> str | None:
+        response = (
+            self._client.table("user_tracker_configs")
+            .select("value_text")
+            .eq("owner_sub", owner_sub)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        if not rows:
+            return None
+        return rows[0].get("value_text")
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def set_user_tracker_config(self, owner_sub: str, owner_email: str | None, value_text: str) -> dict[str, Any]:
+        response = (
+            self._client.table("user_tracker_configs")
+            .upsert(
+                {
+                    "owner_sub": owner_sub,
+                    "owner_email": owner_email,
+                    "value_text": value_text,
+                },
+                on_conflict="owner_sub",
+            )
+            .execute()
+        )
+        return response.data[0]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
     def upsert_user(self, owner_sub: str, owner_email: str | None, active: bool = True) -> dict[str, Any]:
         response = (
             self._client.table("users")

@@ -111,6 +111,24 @@ Exit criteria:
 - [ ] Ingestione `data_snapshots`
 - [ ] Test suite estesa e CI
 
+## Backlog Architettura Multi-User (priorita alta)
+
+- [ ] Isolamento dati per utente (owner esplicito in `things`, `runs`, `messages`).
+- [ ] Tutte le query di lettura/scrittura filtrate per owner, niente accesso cross-user.
+- [x] Tracker configurabili per utente:
+  - [ ] opzione A: template globale + override utente
+  - [x] opzione B: configurazione interamente user-specific
+- [ ] Regole intelligenti user-centric:
+  - [ ] baseline personale
+  - [ ] obiettivi/soglie personali
+  - [ ] interpretazione trend sulla storia del singolo utente
+- [ ] Scheduler: un solo cron globale con dispatcher per utenti attivi (no cron per utente).
+- [ ] Dispatcher con regole per utente (timezone, opt-in, frequenza, policy invio).
+- [ ] Reporting e alert generati separatamente per ogni utente.
+- [ ] Migrazione dati:
+  - [ ] strategia per record legacy senza owner
+  - [ ] piano di backfill owner dove possibile
+
 ## Piano esecuzione rapido (oggi)
 
 - [ ] Blocco 1 completato
