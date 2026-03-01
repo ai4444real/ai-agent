@@ -34,6 +34,11 @@ def index_html_alias() -> FileResponse:
 def health_html() -> FileResponse:
     return FileResponse(static_dir / "health.html")
 
+
+@app.get("/summary.html", include_in_schema=False)
+def summary_html() -> FileResponse:
+    return FileResponse(static_dir / "summary.html")
+
 app.include_router(things_router)
 app.include_router(actions_router)
 app.include_router(auth_router)

@@ -2,10 +2,13 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from zoneinfo import ZoneInfo
 
+from app.actions.weekly_report import compute_week_window_utc
 from app.auth_google import require_google_user
 from app.models import ChoiceQuickRequest, MoodQuickRequest, TextQuickRequest, ThingCreateRequest, ThingResponse
 from app.services.supabase_repo import SupabaseRepo
+from app.settings import get_settings
 
 router = APIRouter(prefix="/things", tags=["things"])
 
@@ -78,3 +81,72 @@ def create_choice_quick(payload: ChoiceQuickRequest, google_user: dict = Depends
 
     inserted = repo.insert_thing(record)
     return ThingResponse(**inserted)
+
+
+@router.get("/summary-window", dependencies=[Depends(require_google_user)])
+def summary_window(days: int = Query(default=8, ge=1, le=31)) -> dict:
+    settings = get_settings()
+    repo = SupabaseRepo()
+    start_utc, end_utc = compute_week_window_utc(window_days=days)
+    rows = repo.list_things(from_ts=start_utc, to_ts=end_utc)
+
+    local_tz = ZoneInfo(settings.app_timezone)
+    local_today = datetime.now(local_tz).date()
+
+    by_type: dict[str, int] = {}
+    today_by_type: dict[str, int] = {}
+    by_type_values: dict[str, dict[str, dict[str, int]]] = {}
+    recent_entries: list[dict] = []
+
+    def _parse_created_at(value: str | datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    for row in rows:
+        row_type = str(row.get("type") or "unknown").strip().lower()
+        by_type[row_type] = by_type.get(row_type, 0) + 1
+
+        created_at = _parse_created_at(row.get("created_at"))
+        if created_at:
+            created_local_date = created_at.astimezone(local_tz).date()
+            if created_local_date == local_today:
+                today_by_type[row_type] = today_by_type.get(row_type, 0) + 1
+
+        slot = by_type_values.setdefault(row_type, {"num": {}, "text": {}})
+        value_num = row.get("value_num")
+        value_text = row.get("value_text")
+        if value_num is not None:
+            key = str(value_num)
+            slot["num"][key] = slot["num"].get(key, 0) + 1
+        if value_text:
+            key = str(value_text).strip().lower()
+            slot["text"][key] = slot["text"].get(key, 0) + 1
+
+        recent_entries.append(
+            {
+                "created_at": row.get("created_at"),
+                "type": row.get("type"),
+                "value_num": row.get("value_num"),
+                "value_text": row.get("value_text"),
+            }
+        )
+
+    recent_entries = sorted(recent_entries, key=lambda r: str(r.get("created_at") or ""), reverse=True)[:100]
+
+    return {
+        "window_days": days,
+        "from": start_utc.isoformat(),
+        "to": end_utc.isoformat(),
+        "total_entries": len(rows),
+        "by_type": by_type,
+        "today_by_type": today_by_type,
+        "by_type_values": by_type_values,
+        "coffee_today": today_by_type.get("caffe", 0),
+        "recent_entries": recent_entries,
+    }

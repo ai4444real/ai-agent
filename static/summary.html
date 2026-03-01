@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Summary</title>
+  <style>
+    :root {
+      --bg: #f7fafc;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --ok: #0f766e;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1100px; margin: 20px auto; padding: 0 12px 20px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+    .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: 12px; color: var(--muted); }
+    h1 { margin: 0; font-size: 22px; }
+    h2 { margin: 0 0 8px; font-size: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+    .metric { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+    .k { color: var(--muted); font-size: 12px; }
+    .v { font-size: 20px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border-bottom: 1px solid var(--line); text-align: left; padding: 6px; }
+    th { color: var(--muted); font-weight: 600; }
+    #status { font-family: Consolas, monospace; font-size: 12px; min-height: 20px; margin-top: 6px; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="top">
+        <h1>Summary</h1>
+        <a class="pill" href="/">home</a>
+        <a class="pill" href="/health.html">health runner</a>
+        <span id="who" class="pill">Not logged in</span>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label for="days" class="k">Window days</label>
+        <input id="days" type="number" min="1" max="31" value="8" style="width:80px; padding:6px;" />
+        <button id="refresh">Refresh</button>
+      </div>
+      <div id="googleSignIn" style="margin-top:8px;"></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Overview</h2>
+      <div class="grid" id="overview"></div>
+    </div>
+
+    <div class="card">
+      <h2>By Type</h2>
+      <table id="byTypeTable"><thead><tr><th>Type</th><th>Window Count</th><th>Today Count</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Value Breakdown</h2>
+      <table id="valueTable"><thead><tr><th>Type</th><th>Numeric values</th><th>Text values</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Recent Entries</h2>
+      <table id="recentTable"><thead><tr><th>Created</th><th>Type</th><th>Num</th><th>Text</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <script>
+    let googleToken = "";
+    const statusNode = document.getElementById("status");
+    const whoNode = document.getElementById("who");
+
+    function setStatus(ok, txt) {
+      statusNode.className = ok ? "ok" : "bad";
+      statusNode.textContent = txt;
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(path, opts);
+      const t = await r.text();
+      let b = t;
+      try { b = JSON.parse(t); } catch (_) {}
+      return { ok: r.ok, status: r.status, body: b };
+    }
+
+    function pairsToText(obj) {
+      const entries = Object.entries(obj || {});
+      if (!entries.length) return "-";
+      return entries.map(([k, v]) => `${k}(${v})`).join(", ");
+    }
+
+    function render(data) {
+      document.getElementById("overview").innerHTML = `
+        <div class="metric"><div class="k">Window Days</div><div class="v">${data.window_days}</div></div>
+        <div class="metric"><div class="k">Total Entries</div><div class="v">${data.total_entries}</div></div>
+        <div class="metric"><div class="k">Coffee Today</div><div class="v">${data.coffee_today}</div></div>
+        <div class="metric"><div class="k">From</div><div class="k">${data.from}</div><div class="k">To ${data.to}</div></div>
+      `;
+
+      const byTypeBody = document.querySelector("#byTypeTable tbody");
+      byTypeBody.innerHTML = "";
+      const types = Array.from(new Set([...Object.keys(data.by_type || {}), ...Object.keys(data.today_by_type || {})])).sort();
+      types.forEach((type) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${type}</td><td>${data.by_type?.[type] || 0}</td><td>${data.today_by_type?.[type] || 0}</td>`;
+        byTypeBody.appendChild(tr);
+      });
+
+      const valueBody = document.querySelector("#valueTable tbody");
+      valueBody.innerHTML = "";
+      Object.entries(data.by_type_values || {}).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([type, vals]) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${type}</td><td>${pairsToText(vals.num)}</td><td>${pairsToText(vals.text)}</td>`;
+        valueBody.appendChild(tr);
+      });
+
+      const recentBody = document.querySelector("#recentTable tbody");
+      recentBody.innerHTML = "";
+      (data.recent_entries || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${row.created_at || ""}</td><td>${row.type || ""}</td><td>${row.value_num ?? ""}</td><td>${row.value_text ?? ""}</td>`;
+        recentBody.appendChild(tr);
+      });
+    }
+
+    async function loadSummary() {
+      if (!googleToken) {
+        setStatus(false, "Login required");
+        return;
+      }
+      const days = Number(document.getElementById("days").value || 8);
+      const r = await api(`/things/summary-window?days=${days}`, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${googleToken}` },
+      });
+      if (!r.ok) {
+        setStatus(false, `Summary failed (${r.status})`);
+        return;
+      }
+      render(r.body);
+      setStatus(true, "Summary loaded");
+    }
+
+    async function onGoogleCredential(response) {
+      googleToken = response.credential || "";
+      const verify = await api("/auth/google/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: googleToken }),
+      });
+      if (!verify.ok) {
+        setStatus(false, "Google login failed");
+        return;
+      }
+      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      await loadSummary();
+    }
+
+    async function bootstrap() {
+      document.getElementById("refresh").addEventListener("click", loadSummary);
+      const cfg = await api("/auth/google/client-id", { method: "GET" });
+      const clientId = cfg.ok ? cfg.body.client_id : "";
+      if (!clientId) {
+        setStatus(false, "GOOGLE_CLIENT_ID not configured");
+        return;
+      }
+      google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
+      google.accounts.id.renderButton(document.getElementById("googleSignIn"), { theme: "outline", size: "large" });
+      setStatus(true, "Waiting for Google login...");
+    }
+
+    window.addEventListener("load", bootstrap);
+  </script>
+</body>
+</html>
