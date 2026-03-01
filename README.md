@@ -63,6 +63,13 @@ curl -X POST http://127.0.0.1:8000/actions/weekly-report \
   -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN"
 ```
 
+### Read latest runs
+
+```bash
+curl "http://127.0.0.1:8000/actions/runs/latest?limit=10" \
+  -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN"
+```
+
 ## 5) Deploy on Render
 
 1. Create new Web Service from repo.

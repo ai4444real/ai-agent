@@ -42,5 +42,14 @@ class ActionResponse(BaseModel):
     run_id: UUID
 
 
+class RunResponse(BaseModel):
+    id: UUID
+    created_at: datetime
+    action: str
+    status: str
+    input_summary: dict[str, Any] | None = None
+    error: str | None = None
+
+
 class HealthResponse(BaseModel):
     ok: bool

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.actions.weekly_report import (
     calculate_metrics,
@@ -10,7 +10,7 @@ from app.actions.weekly_report import (
     render_weekly_report,
 )
 from app.auth import require_trigger_token
-from app.models import ActionResponse
+from app.models import ActionResponse, RunResponse
 from app.services.llm_openai import OpenAIReportHelper
 from app.services.mailer_brevo_smtp import BrevoMailer
 from app.services.supabase_repo import SupabaseRepo
@@ -18,6 +18,13 @@ from app.settings import get_settings
 
 router = APIRouter(prefix="/actions", tags=["actions"])
 mailer = BrevoMailer()
+
+
+@router.get("/runs/latest", response_model=list[RunResponse], dependencies=[Depends(require_trigger_token)])
+def latest_runs(limit: int = Query(default=10, ge=1, le=50)) -> list[RunResponse]:
+    repo = SupabaseRepo()
+    rows = repo.list_latest_runs(limit=limit)
+    return [RunResponse(**row) for row in rows]
 
 
 @router.post("/weekly-report", response_model=ActionResponse, dependencies=[Depends(require_trigger_token)])
@@ -61,4 +68,18 @@ async def weekly_report_action() -> ActionResponse:
         return ActionResponse(ok=True, action="weekly_report", run_id=run_id)
     except Exception as exc:
         repo.finish_run(run_id=run_id, status="fail", error=str(exc)[:4000])
+        alert_subject = "Weekly report failed"
+        alert_body = f"Run {run_id} failed with error: {str(exc)[:1000]}"
+        try:
+            await mailer.send_plain_text(subject=alert_subject, body=alert_body, recipient=settings.mail_to)
+            repo.insert_message(
+                channel="email",
+                recipient=settings.mail_to,
+                subject=alert_subject,
+                body=alert_body,
+                action="weekly_report_fail_alert",
+                run_id=run_id,
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail="weekly_report failed") from exc

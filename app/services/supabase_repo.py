@@ -83,3 +83,8 @@ class SupabaseRepo:
             .execute()
         )
         return response.data[0]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def list_latest_runs(self, limit: int = 10) -> list[dict[str, Any]]:
+        response = self._client.table("runs").select("*").order("created_at", desc=True).limit(limit).execute()
+        return response.data or []
