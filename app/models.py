@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -62,6 +62,26 @@ class MoodQuickRequest(BaseModel):
 class TextQuickRequest(BaseModel):
     type: str = Field(min_length=1)
     value_text: str = Field(min_length=1)
+
+
+class ChoiceQuickRequest(BaseModel):
+    type: str = Field(min_length=1)
+    value_kind: Literal["num", "text"]
+    value_num: Decimal | None = None
+    value_text: str | None = None
+    choice_label: str | None = None
+    choice_icon: str | None = None
+    choice_image: str | None = None
+
+    @model_validator(mode="after")
+    def validate_choice_payload(self) -> "ChoiceQuickRequest":
+        if self.value_kind == "num":
+            if self.value_num is None:
+                raise ValueError("value_num is required when value_kind is num")
+        if self.value_kind == "text":
+            if not self.value_text:
+                raise ValueError("value_text is required when value_kind is text")
+        return self
 
 
 class GoogleVerifyRequest(BaseModel):
