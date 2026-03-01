@@ -1,0 +1,8 @@
+Weekly mood report (last 7 days)
+Summary: {summary}
+- Entries: {count}
+- Average mood: {avg}
+- Min/Max: {min}/{max}
+- Trend (last3 - first3): {trend}
+Signal: {signal}
+Micro-action: {micro_action}

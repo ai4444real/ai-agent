@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MVP Health Runner</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --ok: #0f766e;
+      --err: #b91c1c;
+      --accent: #0b57d0;
+      --line: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 35%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 24px auto;
+      padding: 0 16px 32px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      border-radius: 9px;
+      border: 1px solid var(--line);
+      padding: 10px;
+      font-size: 14px;
+    }
+    input, select, textarea { background: #fff; color: #111827; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.alt { background: #111827; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 140px;
+      gap: 8px;
+      align-items: end;
+    }
+    pre {
+      margin: 10px 0 0;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #0b1020;
+      color: #e5e7eb;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .out {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fafafa;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 48px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+    .ok { color: var(--ok); }
+    .err { color: var(--err); }
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>MVP Health Runner</h1>
+      <p>Usa questa pagina per testare rapidamente i 3 endpoint principali. Se servita da questa app non hai problemi CORS.</p>
+      <div class="grid">
+        <div>
+          <label for="baseUrl">Base URL API</label>
+          <input id="baseUrl" />
+        </div>
+        <div>
+          <label for="trigger">Trigger Token</label>
+          <input id="trigger" placeholder="incolla token" />
+        </div>
+        <div>
+          <label for="mood">Mood value_num</label>
+          <select id="mood">
+            <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:10px; display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+        <button id="runAll">Run all</button>
+        <button id="refreshCurl" class="alt">Refresh curl</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>1) Health check</label>
+          <pre id="curlHealth"></pre>
+        </div>
+        <button id="btnHealth">Run</button>
+      </div>
+      <div id="outHealth" class="out"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>2) Insert mood</label>
+          <pre id="curlThing"></pre>
+        </div>
+        <button id="btnThing">Run</button>
+      </div>
+      <div id="outThing" class="out"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>3) Trigger weekly report</label>
+          <pre id="curlWeekly"></pre>
+        </div>
+        <button id="btnWeekly">Run</button>
+      </div>
+      <div id="outWeekly" class="out"></div>
+    </div>
+  </div>
+
+  <script>
+    const baseUrl = document.getElementById('baseUrl');
+    const trigger = document.getElementById('trigger');
+    const mood = document.getElementById('mood');
+
+    const outHealth = document.getElementById('outHealth');
+    const outThing = document.getElementById('outThing');
+    const outWeekly = document.getElementById('outWeekly');
+
+    function getBase() {
+      return (baseUrl.value || '').replace(/\/$/, '');
+    }
+
+    function setOut(node, ok, status, data) {
+      node.className = 'out ' + (ok ? 'ok' : 'err');
+      const pretty = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      node.textContent = `[${status}]\n${pretty}`;
+    }
+
+    function refreshCurl() {
+      const base = getBase();
+      const token = trigger.value.trim();
+      const val = Number(mood.value);
+
+      document.getElementById('curlHealth').textContent =
+        `curl "${base}/health"`;
+
+      document.getElementById('curlThing').textContent =
+        `curl -X POST "${base}/things" -H "Content-Type: application/json" -d "{\\"type\\":\\"mood\\",\\"value_num\\":${val}}"`;
+
+      document.getElementById('curlWeekly').textContent =
+        `curl -X POST "${base}/actions/weekly-report" -H "X-Trigger-Token: ${token || 'INSERISCI_TOKEN'}"`;
+    }
+
+    async function callApi(url, options, outNode) {
+      try {
+        const res = await fetch(url, options);
+        const text = await res.text();
+        let body = text;
+        try { body = JSON.parse(text); } catch (_) {}
+        setOut(outNode, res.ok, res.status, body);
+      } catch (err) {
+        setOut(outNode, false, 'FETCH_ERROR', err.message || String(err));
+      }
+    }
+
+    async function runHealth() {
+      await callApi(`${getBase()}/health`, { method: 'GET' }, outHealth);
+    }
+
+    async function runThing() {
+      await callApi(`${getBase()}/things`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'mood', value_num: Number(mood.value) }),
+      }, outThing);
+    }
+
+    async function runWeekly() {
+      await callApi(`${getBase()}/actions/weekly-report`, {
+        method: 'POST',
+        headers: { 'X-Trigger-Token': trigger.value.trim() },
+      }, outWeekly);
+    }
+
+    document.getElementById('btnHealth').addEventListener('click', runHealth);
+    document.getElementById('btnThing').addEventListener('click', runThing);
+    document.getElementById('btnWeekly').addEventListener('click', runWeekly);
+    document.getElementById('runAll').addEventListener('click', async () => {
+      await runHealth();
+      await runThing();
+      await runWeekly();
+    });
+
+    document.getElementById('refreshCurl').addEventListener('click', refreshCurl);
+    [baseUrl, trigger, mood].forEach((el) => el.addEventListener('input', refreshCurl));
+
+    baseUrl.value = window.location.origin.startsWith('http') ? window.location.origin : 'http://127.0.0.1:8000';
+    refreshCurl();
+  </script>
+</body>
+</html>
