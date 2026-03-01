@@ -17,13 +17,14 @@ class WeeklyReportData:
     values: list[int]
 
 
-def compute_week_window_utc(now_utc: datetime | None = None) -> tuple[datetime, datetime]:
+def compute_week_window_utc(now_utc: datetime | None = None, window_days: int | None = None) -> tuple[datetime, datetime]:
     settings = get_settings()
     now_utc = now_utc or datetime.now(timezone.utc)
     local_tz = ZoneInfo(settings.app_timezone)
+    days = window_days if window_days is not None else settings.report_window_days
 
     local_now = now_utc.astimezone(local_tz)
-    local_start = local_now - timedelta(days=7)
+    local_start = local_now - timedelta(days=days)
 
     return local_start.astimezone(timezone.utc), local_now.astimezone(timezone.utc)
 
@@ -74,9 +75,9 @@ def deterministic_signal_and_action(metrics: dict) -> tuple[str, str, str]:
 
     if count == 0:
         return (
-            "No mood entries in last 7 days.",
+            "No mood entries in the report window.",
             "Stability cannot be inferred due to missing data.",
-            "Add one mood check-in at a fixed hour each day this week.",
+            "Add one mood check-in at a fixed hour each day.",
         )
 
     if count < 4:
@@ -110,3 +111,48 @@ def render_weekly_report(metrics: dict, summary: str, signal: str, micro_action:
         signal=signal,
         micro_action=micro_action,
     ).strip()
+
+
+def summarize_tracker_activity(rows: list[dict]) -> dict:
+    summary: dict = {"total_entries": len(rows), "by_type": {}}
+    by_type: dict = summary["by_type"]
+
+    for row in rows:
+        thing_type = (row.get("type") or "unknown").strip().lower()
+        slot = by_type.setdefault(thing_type, {"count": 0, "num_values": {}, "text_values": {}})
+        slot["count"] += 1
+
+        value_num = row.get("value_num")
+        if value_num is not None:
+            as_decimal = Decimal(str(value_num))
+            normalized = str(int(as_decimal)) if as_decimal == int(as_decimal) else str(float(as_decimal))
+            slot["num_values"][normalized] = slot["num_values"].get(normalized, 0) + 1
+
+        value_text = row.get("value_text")
+        if value_text:
+            normalized_text = str(value_text).strip().lower()
+            slot["text_values"][normalized_text] = slot["text_values"].get(normalized_text, 0) + 1
+
+    return summary
+
+
+def render_tracker_snapshot(summary: dict, max_types: int = 5, max_values: int = 4) -> str:
+    by_type = summary.get("by_type", {})
+    if not by_type:
+        return "No tracker entries in window."
+
+    ordered = sorted(by_type.items(), key=lambda item: item[1].get("count", 0), reverse=True)
+    lines: list[str] = []
+    for tracker_type, data in ordered[:max_types]:
+        count = data.get("count", 0)
+        parts: list[str] = [f"{tracker_type}={count}"]
+        text_values = data.get("text_values", {})
+        if text_values:
+            top_text = sorted(text_values.items(), key=lambda kv: kv[1], reverse=True)[:max_values]
+            parts.append("text:" + ", ".join([f"{k}({v})" for k, v in top_text]))
+        num_values = data.get("num_values", {})
+        if num_values:
+            top_num = sorted(num_values.items(), key=lambda kv: kv[1], reverse=True)[:max_values]
+            parts.append("num:" + ", ".join([f"{k}({v})" for k, v in top_num]))
+        lines.append(" - " + " | ".join(parts))
+    return "\n".join(lines)

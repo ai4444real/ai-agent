@@ -8,6 +8,8 @@ from app.actions.weekly_report import (
     deterministic_signal_and_action,
     extract_mood_values,
     render_weekly_report,
+    render_tracker_snapshot,
+    summarize_tracker_activity,
 )
 from app.auth import require_trigger_token
 from app.models import ActionResponse, RunResponse
@@ -32,26 +34,37 @@ async def weekly_report_action() -> ActionResponse:
     repo = SupabaseRepo()
     settings = get_settings()
     llm_helper = OpenAIReportHelper()
-    start_utc, end_utc = compute_week_window_utc()
+    start_utc, end_utc = compute_week_window_utc(window_days=settings.report_window_days)
     run = repo.create_run(
         action="weekly_report",
-        input_summary={"from": start_utc.isoformat(), "to": end_utc.isoformat()},
+        input_summary={"from": start_utc.isoformat(), "to": end_utc.isoformat(), "window_days": settings.report_window_days},
     )
     run_id = run["id"]
 
     try:
-        rows = repo.list_things(thing_type="mood", from_ts=start_utc, to_ts=end_utc)
-        values = extract_mood_values(list(reversed(rows)))
+        rows = repo.list_things(from_ts=start_utc, to_ts=end_utc)
+        mood_rows = [row for row in rows if (row.get("type") or "").strip().lower() == "mood"]
+        values = extract_mood_values(list(reversed(mood_rows)))
+        rules_text = repo.get_config_text("report_rules")
+        tracker_summary = summarize_tracker_activity(rows)
 
         metrics = calculate_metrics(values)
+        report_payload = {
+            "window_days": settings.report_window_days,
+            "mood_metrics": metrics,
+            "tracker_summary": tracker_summary,
+        }
         summary, signal, micro_action = deterministic_signal_and_action(metrics)
         try:
-            llm_result = llm_helper.generate_signal_and_micro_action(metrics)
+            llm_result = llm_helper.generate_signal_and_micro_action(report_payload, rules_text=rules_text)
             if llm_result:
                 signal, micro_action = llm_result
         except Exception:
             pass
         body = render_weekly_report(metrics, summary, signal, micro_action)
+        body += f"\n\nTracker snapshot ({settings.report_window_days}d):\n{render_tracker_snapshot(tracker_summary)}"
+        if rules_text:
+            body += f"\n\nRules context excerpt:\n{rules_text[:300]}"
 
         subject = f"Weekly mood report - {datetime.now(timezone.utc).date().isoformat()}"
         await mailer.send_plain_text(subject=subject, body=body)

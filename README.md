@@ -23,6 +23,7 @@ SMTP_PASS=
 MAIL_FROM=
 MAIL_TO=
 APP_TIMEZONE=Europe/Zurich
+REPORT_WINDOW_DAYS=8
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 GOOGLE_CLIENT_ID=
@@ -68,6 +69,7 @@ http://127.0.0.1:8000/
 
 Then login with Google and use the tracker cards.
 Home is now config-driven: trackers are defined in `static/index.html` (`TRACKER_CONFIGS`) and choices post to `/things/choice-quick`.
+Weekly report uses a configurable time window (`REPORT_WINDOW_DAYS`, default `8`) and aggregates all tracked types before calling AI.
 
 ### Trigger weekly report
 
@@ -81,6 +83,24 @@ curl -X POST http://127.0.0.1:8000/actions/weekly-report \
 ```bash
 curl "http://127.0.0.1:8000/actions/runs/latest?limit=10" \
   -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN"
+```
+
+### Report rules config (single text block)
+
+Get:
+
+```bash
+curl "http://127.0.0.1:8000/config/report-rules" \
+  -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN"
+```
+
+Put:
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/config/report-rules" \
+  -H "X-Trigger-Token: YOUR_TRIGGER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"your long report rules here"}'
 ```
 
 ## 5) Deploy on Render
@@ -106,6 +126,10 @@ curl "http://127.0.0.1:8000/actions/runs/latest?limit=10" \
 - `POST /actions/weekly-report`
 - `GET /health`
 - Logging on `runs` and `messages`
+
+## Existing Deploy Note
+
+If your Supabase was created before `app_config`, run the updated SQL in `schema.sql` to add the `app_config` table.
 
 ## Not in MVP
 

@@ -49,3 +49,10 @@ create table if not exists messages (
 );
 create index if not exists idx_messages_created_at
   on messages (created_at desc);
+
+-- APP CONFIG (single-tenant config text blocks, e.g. report rules)
+create table if not exists app_config (
+  key text primary key,
+  value_text text not null,
+  updated_at timestamptz not null default now()
+);

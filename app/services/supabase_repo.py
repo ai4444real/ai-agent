@@ -88,3 +88,20 @@ class SupabaseRepo:
     def list_latest_runs(self, limit: int = 10) -> list[dict[str, Any]]:
         response = self._client.table("runs").select("*").order("created_at", desc=True).limit(limit).execute()
         return response.data or []
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def get_config_text(self, key: str) -> str | None:
+        response = self._client.table("app_config").select("value_text").eq("key", key).limit(1).execute()
+        rows = response.data or []
+        if not rows:
+            return None
+        return rows[0].get("value_text")
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def set_config_text(self, key: str, value_text: str) -> dict[str, Any]:
+        response = (
+            self._client.table("app_config")
+            .upsert({"key": key, "value_text": value_text}, on_conflict="key")
+            .execute()
+        )
+        return response.data[0]

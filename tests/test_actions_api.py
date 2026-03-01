@@ -28,6 +28,9 @@ class RepoForWeeklyFailure:
     def create_run(self, action: str, input_summary=None):
         return {"id": "22222222-2222-2222-2222-222222222222"}
 
+    def get_config_text(self, key: str):
+        return None
+
     def list_things(self, thing_type=None, from_ts=None, to_ts=None):
         return [{"value_num": 3}, {"value_num": 4}, {"value_num": 2}]
 
@@ -60,7 +63,7 @@ class FakeMailerFailThenPass:
 
 
 class FakeLLM:
-    def generate_signal_and_micro_action(self, metrics):
+    def generate_signal_and_micro_action(self, report_payload, rules_text=None):
         return None
 
 
@@ -96,7 +99,7 @@ def test_weekly_report_failure_sends_alert(monkeypatch):
     monkeypatch.setattr(
         actions_api,
         "compute_week_window_utc",
-        lambda: (
+        lambda **kwargs: (
             datetime(2026, 2, 22, 10, 0, 0, tzinfo=timezone.utc),
             datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
         ),
@@ -104,7 +107,7 @@ def test_weekly_report_failure_sends_alert(monkeypatch):
     monkeypatch.setattr(
         actions_api,
         "get_settings",
-        lambda: SimpleNamespace(mail_to="ops@example.com"),
+        lambda: SimpleNamespace(mail_to="ops@example.com", report_window_days=8),
     )
     monkeypatch.setattr(auth, "get_settings", lambda: SimpleNamespace(trigger_token="test-token"))
 

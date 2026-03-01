@@ -96,3 +96,11 @@ class GoogleUserResponse(BaseModel):
 
 class GoogleClientIdResponse(BaseModel):
     client_id: str
+
+
+class ReportRulesRequest(BaseModel):
+    text: str = Field(min_length=1)
+
+
+class ReportRulesResponse(BaseModel):
+    text: str | None = None
