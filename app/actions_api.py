@@ -55,6 +55,15 @@ async def weekly_report_action() -> ActionResponse:
             "mood_metrics": metrics,
             "tracker_summary": tracker_summary,
         }
+        debug_summary = {
+            "from": start_utc.isoformat(),
+            "to": end_utc.isoformat(),
+            "window_days": window_days,
+            "report_payload": report_payload,
+            "rules_excerpt": (rules_text or "")[:1000],
+            "rules_length": len(rules_text or ""),
+        }
+        repo.update_run_input_summary(run_id=run_id, input_summary=debug_summary)
         summary, signal, micro_action = deterministic_signal_and_action(metrics)
         try:
             llm_result = llm_helper.generate_signal_and_micro_action(report_payload, rules_text=rules_text)

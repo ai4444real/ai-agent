@@ -59,6 +59,16 @@ class SupabaseRepo:
         return response.data[0]
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def update_run_input_summary(self, run_id: UUID | str, input_summary: dict[str, Any]) -> dict[str, Any]:
+        response = (
+            self._client.table("runs")
+            .update({"input_summary": input_summary})
+            .eq("id", str(run_id))
+            .execute()
+        )
+        return response.data[0]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
     def insert_message(
         self,
         channel: str,

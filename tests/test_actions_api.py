@@ -34,6 +34,9 @@ class RepoForWeeklyFailure:
     def list_things(self, thing_type=None, from_ts=None, to_ts=None):
         return [{"value_num": 3}, {"value_num": 4}, {"value_num": 2}]
 
+    def update_run_input_summary(self, run_id, input_summary):
+        return {"id": run_id, "input_summary": input_summary}
+
     def finish_run(self, run_id, status: str, error=None):
         self.finished.append({"run_id": run_id, "status": status, "error": error})
         return self.finished[-1]
