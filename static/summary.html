@@ -76,6 +76,7 @@
 
   <script>
     let googleToken = "";
+    const TOKEN_STORAGE_KEY = "aa_google_id_token";
     const statusNode = document.getElementById("status");
     const whoNode = document.getElementById("who");
 
@@ -151,18 +152,41 @@
     }
 
     async function onGoogleCredential(response) {
-      googleToken = response.credential || "";
+      const token = response.credential || "";
       const verify = await api("/auth/google/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: googleToken }),
+        body: JSON.stringify({ id_token: token }),
       });
       if (!verify.ok) {
         setStatus(false, "Google login failed");
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
         return;
       }
+      googleToken = token;
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
       whoNode.textContent = `Logged in: ${verify.body.email}`;
       await loadSummary();
+    }
+
+    async function tryStoredLogin() {
+      const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!stored) {
+        return false;
+      }
+      const verify = await api("/auth/google/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: stored }),
+      });
+      if (!verify.ok) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        return false;
+      }
+      googleToken = stored;
+      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      await loadSummary();
+      return true;
     }
 
     async function bootstrap() {
@@ -175,7 +199,10 @@
       }
       google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
       google.accounts.id.renderButton(document.getElementById("googleSignIn"), { theme: "outline", size: "large" });
-      setStatus(true, "Waiting for Google login...");
+      const restored = await tryStoredLogin();
+      if (!restored) {
+        setStatus(true, "Waiting for Google login...");
+      }
     }
 
     window.addEventListener("load", bootstrap);

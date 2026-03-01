@@ -130,6 +130,7 @@
 
   <script>
     let googleToken = "";
+    const TOKEN_STORAGE_KEY = "aa_google_id_token";
 
     // Configurazione centralizzata dei tracker.
     // valueKind: "num" salva su value_num, "text" salva su value_text.
@@ -311,8 +312,8 @@
     }
 
     async function onGoogleCredential(response) {
-      googleToken = response.credential || "";
-      if (!googleToken) {
+      const token = response.credential || "";
+      if (!token) {
         setStatus(false, "Google token mancante");
         return;
       }
@@ -320,18 +321,42 @@
       const verify = await api("/auth/google/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: googleToken })
+        body: JSON.stringify({ id_token: token })
       });
 
       if (!verify.ok) {
         setStatus(false, `Login non valido (${verify.status})`);
         setChoiceButtonsEnabled(false);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
         return;
       }
 
+      googleToken = token;
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
       whoNode.textContent = `Logged in: ${verify.body.email}`;
       setChoiceButtonsEnabled(true);
       setStatus(true, "Login OK. Seleziona una scelta da un tracker.");
+    }
+
+    async function tryStoredLogin() {
+      const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!stored) {
+        return false;
+      }
+      const verify = await api("/auth/google/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: stored })
+      });
+      if (!verify.ok) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        return false;
+      }
+      googleToken = stored;
+      whoNode.textContent = `Logged in: ${verify.body.email}`;
+      setChoiceButtonsEnabled(true);
+      setStatus(true, "Sessione ripristinata.");
+      return true;
     }
 
     async function bootstrap() {
@@ -360,7 +385,10 @@
         text: "signin_with",
         shape: "pill"
       });
-      setStatus(true, "In attesa login Google...");
+      const restored = await tryStoredLogin();
+      if (!restored) {
+        setStatus(true, "In attesa login Google...");
+      }
     }
 
     window.addEventListener("load", () => setTimeout(bootstrap, 200));
