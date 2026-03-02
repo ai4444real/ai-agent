@@ -68,6 +68,7 @@ class RunResponse(BaseModel):
     created_at: datetime
     action: str
     status: str
+    usage: dict[str, Any] | None = None
     input_summary: dict[str, Any] | None = None
     error: str | None = None
 

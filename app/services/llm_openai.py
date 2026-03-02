@@ -12,8 +12,38 @@ from app.settings import get_settings
 class OpenAIReportHelper:
     def __init__(self) -> None:
         self._settings = get_settings()
+        self.last_usage: dict[str, Any] = self._zero_usage()
+
+    @staticmethod
+    def _zero_usage() -> dict[str, Any]:
+        return {
+            "requests": 0,
+            "model": None,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+        }
+
+    @staticmethod
+    def _usage_from_response(response: Any, model: str | None = None) -> dict[str, Any]:
+        usage = getattr(response, "usage", None)
+        input_tokens = 0
+        output_tokens = 0
+        total_tokens = 0
+        if usage is not None:
+            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            total_tokens = int(getattr(usage, "total_tokens", 0) or (input_tokens + output_tokens))
+        return {
+            "requests": 1,
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+        }
 
     def generate_signal_and_micro_action(self, report_payload: dict, rules_text: str | None = None) -> tuple[str, str] | None:
+        self.last_usage = self._zero_usage()
         if not self._settings.openai_api_key:
             return None
 
@@ -32,6 +62,7 @@ class OpenAIReportHelper:
                 {"role": "user", "content": user_prompt},
             ],
         )
+        self.last_usage = self._usage_from_response(response, model=self._settings.openai_model)
         text = (response.output_text or "").strip()
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if len(lines) < 2:
@@ -49,6 +80,7 @@ class OpenAIReportHelper:
         tool_executor: Callable[[str, dict[str, Any]], dict[str, Any]],
         max_rounds: int = 6,
     ) -> tuple[str | None, list[dict[str, Any]]]:
+        self.last_usage = self._zero_usage()
         if not self._settings.openai_api_key:
             return None, []
 
@@ -98,6 +130,7 @@ class OpenAIReportHelper:
             ],
             tools=tools,
         )
+        aggregate_usage = self._usage_from_response(response, model=self._settings.openai_model)
 
         tool_trace: list[dict[str, Any]] = []
         rounds = 0
@@ -107,6 +140,7 @@ class OpenAIReportHelper:
             function_calls = [item for item in outputs if getattr(item, "type", None) == "function_call"]
             if not function_calls:
                 text = (response.output_text or "").strip()
+                self.last_usage = aggregate_usage
                 return (text or None), tool_trace
 
             tool_outputs = []
@@ -135,6 +169,12 @@ class OpenAIReportHelper:
                 input=tool_outputs,
                 tools=tools,
             )
+            step_usage = self._usage_from_response(response, model=self._settings.openai_model)
+            aggregate_usage["requests"] += step_usage["requests"]
+            aggregate_usage["input_tokens"] += step_usage["input_tokens"]
+            aggregate_usage["output_tokens"] += step_usage["output_tokens"]
+            aggregate_usage["total_tokens"] += step_usage["total_tokens"]
 
         text = (response.output_text or "").strip()
+        self.last_usage = aggregate_usage
         return (text or None), tool_trace

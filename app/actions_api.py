@@ -25,6 +25,16 @@ router = APIRouter(prefix="/actions", tags=["actions"])
 mailer = BrevoMailer()
 
 
+def _zero_usage_payload() -> dict:
+    return {
+        "requests": 0,
+        "model": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+
+
 def _build_run_trace(run_row: dict, messages: list[dict]) -> list[dict]:
     nodes: list[dict] = [
         {
@@ -43,6 +53,17 @@ def _build_run_trace(run_row: dict, messages: list[dict]) -> list[dict]:
                 "label": f"Tool {i}: {item.get('name') or 'unknown'}",
                 "kind": "tool",
                 "meta": item,
+            }
+        )
+
+    usage = run_row.get("usage") or {}
+    if isinstance(usage, dict):
+        nodes.append(
+            {
+                "id": "llm_usage",
+                "label": "LLM usage (cost basis)",
+                "kind": "usage",
+                "meta": usage,
             }
         )
 
@@ -86,6 +107,7 @@ async def _run_weekly_report_for_owner(owner_sub: str, owner_email: str | None, 
         owner_email=owner_email or settings.mail_to,
     )
     run_id = run["id"]
+    llm_usage = _zero_usage_payload()
 
     try:
         rows = repo.list_things(from_ts=start_utc, to_ts=end_utc, owner_sub=owner_sub)
@@ -200,6 +222,7 @@ async def _run_weekly_report_for_owner(owner_sub: str, owner_email: str | None, 
                     rules_text=rules_text,
                     tool_executor=_tool_executor,
                 )
+                llm_usage = getattr(llm_helper, "last_usage", _zero_usage_payload()) or _zero_usage_payload()
                 debug_summary["smart_mode"] = True
                 debug_summary["smart_tool_trace"] = smart_trace
                 if smart_body:
@@ -210,6 +233,7 @@ async def _run_weekly_report_for_owner(owner_sub: str, owner_email: str | None, 
         else:
             try:
                 llm_result = llm_helper.generate_signal_and_micro_action(report_payload, rules_text=rules_text)
+                llm_usage = getattr(llm_helper, "last_usage", _zero_usage_payload()) or _zero_usage_payload()
                 if llm_result:
                     signal, micro_action = llm_result
             except Exception:
@@ -222,6 +246,8 @@ async def _run_weekly_report_for_owner(owner_sub: str, owner_email: str | None, 
             body += f"\n\nRules context excerpt:\n{rules_text[:300]}"
         body += "\n\nRules source: user_only"
         repo.update_run_input_summary(run_id=run_id, input_summary=debug_summary)
+        if hasattr(repo, "update_run_usage"):
+            repo.update_run_usage(run_id=run_id, usage=llm_usage)
 
         subject = f"Weekly mood report - {datetime.now(timezone.utc).date().isoformat()}"
         report_recipient = owner_email or settings.mail_to

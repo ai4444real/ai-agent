@@ -34,6 +34,7 @@ create table if not exists runs (
   owner_email text null,
   action text not null,
   status text not null,
+  usage jsonb not null default '{"requests":0,"model":null,"input_tokens":0,"output_tokens":0,"total_tokens":0}',
   input_summary jsonb null,
   error text null
 );
@@ -93,12 +94,18 @@ alter table if exists things add column if not exists owner_sub text null;
 alter table if exists things add column if not exists owner_email text null;
 alter table if exists runs add column if not exists owner_sub text null;
 alter table if exists runs add column if not exists owner_email text null;
+alter table if exists runs add column if not exists usage jsonb not null default '{"requests":0,"model":null,"input_tokens":0,"output_tokens":0,"total_tokens":0}';
 alter table if exists messages add column if not exists owner_sub text null;
 alter table if exists messages add column if not exists owner_email text null;
 
 create index if not exists idx_things_owner_created_at on things (owner_sub, created_at desc);
 create index if not exists idx_runs_owner_created_at on runs (owner_sub, created_at desc);
 create index if not exists idx_messages_owner_created_at on messages (owner_sub, created_at desc);
+
+-- backfill usage on legacy runs
+update runs
+set usage = '{"requests":0,"model":null,"input_tokens":0,"output_tokens":0,"total_tokens":0}'
+where usage is null;
 
 -- optional backfill users from existing owned things
 insert into users (owner_sub, owner_email, active)

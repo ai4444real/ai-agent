@@ -56,6 +56,7 @@ class RepoMineReportStub:
             "owner_email": "mine@example.com",
             "action": "weekly_report_smart",
             "status": "success",
+            "usage": {"requests": 2, "model": "gpt-4.1-mini", "input_tokens": 123, "output_tokens": 45, "total_tokens": 168},
             "input_summary": {"smart_tool_trace": [{"name": "get_daily_counts", "args": {"days": 8, "type": "mood"}}]},
             "error": None,
         }
@@ -151,5 +152,6 @@ def test_runs_mine_latest_and_trace(monkeypatch):
     body = r_trace.json()
     assert body["run"]["id"] == run_id
     assert len(body["nodes"]) >= 3
+    assert any(node.get("kind") == "usage" for node in body["nodes"])
 
     app.dependency_overrides.clear()

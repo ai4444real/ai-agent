@@ -184,7 +184,12 @@
 
       const recentBody = document.querySelector("#recentTable tbody");
       recentBody.innerHTML = "";
-      (data.recent_entries || []).forEach((row) => {
+      const recentRows = (data.recent_entries || []).slice().sort((a, b) => {
+        const aTs = Date.parse(String(a.created_at || ""));
+        const bTs = Date.parse(String(b.created_at || ""));
+        return (Number.isNaN(bTs) ? 0 : bTs) - (Number.isNaN(aTs) ? 0 : aTs);
+      });
+      recentRows.forEach((row) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `<td>${row.created_at || ""}</td><td>${row.type || ""}</td><td>${row.value_num ?? ""}</td><td>${row.value_text ?? ""}</td>`;
         recentBody.appendChild(tr);
