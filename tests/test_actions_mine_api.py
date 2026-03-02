@@ -42,6 +42,9 @@ class LLMNone:
     def generate_signal_and_micro_action(self, report_payload, rules_text=None):
         return None
 
+    def generate_smart_weekly_report(self, context_payload, rules_text=None, tool_executor=None, max_rounds=6):
+        return "Report smart test", [{"name": "get_window_coverage"}]
+
 
 def test_weekly_report_mine_requires_google_auth():
     client = TestClient(app)
@@ -63,5 +66,24 @@ def test_weekly_report_mine_filters_by_owner(monkeypatch):
 
     assert r.status_code == 200
     assert repo.last_owner_sub == "sub-mine"
+
+    app.dependency_overrides.clear()
+
+
+def test_weekly_report_smart_mine_filters_by_owner(monkeypatch):
+    import app.actions_api as actions_api
+
+    repo = RepoMineReportStub()
+    app.dependency_overrides[require_google_user] = lambda: {"sub": "sub-smart", "email": "smart@example.com"}
+    monkeypatch.setattr(actions_api, "SupabaseRepo", lambda: repo)
+    monkeypatch.setattr(actions_api, "mailer", MailerOk())
+    monkeypatch.setattr(actions_api, "OpenAIReportHelper", lambda: LLMNone())
+
+    client = TestClient(app)
+    r = client.post("/actions/weekly-report-smart-mine")
+
+    assert r.status_code == 200
+    assert r.json()["action"] == "weekly_report_smart"
+    assert repo.last_owner_sub == "sub-smart"
 
     app.dependency_overrides.clear()

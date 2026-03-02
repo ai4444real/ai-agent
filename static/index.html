@@ -221,6 +221,7 @@
       <div class="row">
         <button id="yesterdayToggle" class="toggle" type="button">Yesterday: OFF</button>
         <button id="runMyReportBtn" class="small-btn" type="button" disabled>Run my weekly report</button>
+        <button id="runMySmartReportBtn" class="small-btn" type="button" disabled>Run smart weekly report</button>
       </div>
       <div id="status"></div>
       <div id="lastCreatedRow" class="last-created" style="display:none;">
@@ -271,6 +272,7 @@
     const trackersNode = document.getElementById("trackers");
     const yesterdayToggle = document.getElementById("yesterdayToggle");
     const runMyReportBtn = document.getElementById("runMyReportBtn");
+    const runMySmartReportBtn = document.getElementById("runMySmartReportBtn");
     const lastCreatedRow = document.getElementById("lastCreatedRow");
     const lastCreatedText = document.getElementById("lastCreatedText");
     const undoBtn = document.getElementById("undoBtn");
@@ -294,6 +296,7 @@
       genericSaveBtn.disabled = !enabled;
       logoutBtn.disabled = !enabled;
       runMyReportBtn.disabled = !enabled;
+      runMySmartReportBtn.disabled = !enabled;
     }
 
     async function runMyWeeklyReport() {
@@ -314,6 +317,26 @@
         return;
       }
       setStatus(true, `Report lanciato. run_id=${r.body.run_id || "n/a"}`);
+    }
+
+    async function runMySmartWeeklyReport() {
+      if (!googleToken) {
+        setStatus(false, "Login richiesto");
+        return;
+      }
+      runMySmartReportBtn.disabled = true;
+      const r = await api("/actions/weekly-report-smart-mine", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${googleToken}`
+        }
+      });
+      runMySmartReportBtn.disabled = false;
+      if (!r.ok) {
+        setStatus(false, `Smart report failed (${r.status}): ${JSON.stringify(r.body)}`);
+        return;
+      }
+      setStatus(true, `Smart report lanciato. run_id=${r.body.run_id || "n/a"}`);
     }
 
     function setAuthState(email) {
@@ -667,6 +690,7 @@
       genericSaveBtn.addEventListener("click", submitGenericText);
       logoutBtn.addEventListener("click", logout);
       runMyReportBtn.addEventListener("click", runMyWeeklyReport);
+      runMySmartReportBtn.addEventListener("click", runMySmartWeeklyReport);
       renderYesterdayToggle();
       setTimeout(bootstrap, 200);
     });

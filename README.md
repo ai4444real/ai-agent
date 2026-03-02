@@ -80,6 +80,13 @@ curl -X POST http://127.0.0.1:8000/actions/weekly-report-mine \
   -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
 ```
 
+### Trigger my smart weekly report (tool-calling demo)
+
+```bash
+curl -X POST http://127.0.0.1:8000/actions/weekly-report-smart-mine \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
+```
+
 ### Read latest runs
 
 ```bash
