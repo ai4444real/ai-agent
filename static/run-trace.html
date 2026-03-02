@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Run Trace</title>
+  <style>
+    :root {
+      --bg: #f7fafc;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --ok: #0f766e;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1100px; margin: 20px auto; padding: 0 12px 20px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+    .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .row { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: 12px; color: var(--muted); text-decoration: none; }
+    h1 { margin: 0; font-size: 22px; }
+    h2 { margin: 0; font-size: 16px; }
+    button, select {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 12px;
+      font-weight: 600;
+    }
+    .auth-state {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: #fff;
+    }
+    .auth-state.in { border-color: #0f766e; background: #ecfdf5; color: #065f46; font-weight: 700; }
+    .auth-state.out { border-color: #fca5a5; background: #fff1f2; color: #991b1b; font-weight: 700; }
+    #status { font-family: Consolas, monospace; font-size: 12px; min-height: 20px; margin-top: 6px; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .trace { margin-top: 8px; padding-left: 16px; }
+    .trace-step {
+      position: relative;
+      padding-left: 26px;
+      margin: 8px 0;
+      min-height: 20px;
+    }
+    .trace-step::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #3b82f6;
+      border: 2px solid #dbeafe;
+    }
+    .trace-step::after {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 18px;
+      width: 2px;
+      height: 18px;
+      background: #cbd5e1;
+    }
+    .trace-step:last-child::after { display: none; }
+    .trace-step.start::before { background: #0f766e; }
+    .trace-step.end::before { background: #0f766e; }
+    .trace-step.error::before { background: #b91c1c; }
+    .trace-step.tool::before { background: #2563eb; }
+    .trace-step.message::before { background: #7c3aed; }
+    .label { font-weight: 700; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: pre-wrap; }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="top">
+        <h1>Run Trace</h1>
+        <a class="pill" href="/">home</a>
+        <a class="pill" href="/summary.html">summary</a>
+        <a class="pill" href="/my-rules.html">my rules</a>
+      </div>
+      <div class="row">
+        <span id="who" class="pill">Not logged in</span>
+        <span id="authState" class="auth-state out">Logged OUT</span>
+        <button id="logoutBtn" type="button" disabled>Logout</button>
+      </div>
+      <div class="row">
+        <select id="runSelect" disabled></select>
+        <button id="loadBtn" type="button" disabled>Load trace</button>
+      </div>
+      <div id="googleSignIn" style="margin-top:8px;"></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Trace graph</h2>
+      <div id="traceGraph" class="trace"></div>
+    </div>
+  </div>
+
+  <script>
+    let googleToken = "";
+    const TOKEN_STORAGE_KEY = "aa_google_id_token";
+    const whoNode = document.getElementById("who");
+    const authStateNode = document.getElementById("authState");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const googleSignInNode = document.getElementById("googleSignIn");
+    const statusNode = document.getElementById("status");
+    const runSelectNode = document.getElementById("runSelect");
+    const loadBtn = document.getElementById("loadBtn");
+    const traceGraphNode = document.getElementById("traceGraph");
+
+    function setStatus(ok, txt) {
+      statusNode.className = ok ? "ok" : "bad";
+      statusNode.textContent = txt;
+    }
+
+    function setAuthState(email) {
+      if (email) {
+        whoNode.textContent = `Logged in: ${email}`;
+        authStateNode.textContent = "Logged IN";
+        authStateNode.className = "auth-state in";
+        googleSignInNode.style.display = "none";
+        logoutBtn.disabled = false;
+        runSelectNode.disabled = false;
+        loadBtn.disabled = false;
+        return;
+      }
+      whoNode.textContent = "Not logged in";
+      authStateNode.textContent = "Logged OUT";
+      authStateNode.className = "auth-state out";
+      googleSignInNode.style.display = "block";
+      logoutBtn.disabled = true;
+      runSelectNode.disabled = true;
+      loadBtn.disabled = true;
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(path, opts);
+      const t = await r.text();
+      let b = t;
+      try { b = JSON.parse(t); } catch (_) {}
+      return { ok: r.ok, status: r.status, body: b };
+    }
+
+    function renderNodes(nodes) {
+      traceGraphNode.innerHTML = "";
+      if (!nodes || !nodes.length) {
+        traceGraphNode.textContent = "No nodes";
+        return;
+      }
+      nodes.forEach((node) => {
+        const row = document.createElement("div");
+        row.className = `trace-step ${node.kind || ""}`;
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = node.label || node.id || "node";
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = JSON.stringify(node.meta || {}, null, 2);
+        row.appendChild(label);
+        row.appendChild(meta);
+        traceGraphNode.appendChild(row);
+      });
+    }
+
+    async function loadRunList() {
+      const r = await api("/actions/runs-mine/latest?limit=20", {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${googleToken}` },
+      });
+      if (!r.ok) {
+        setStatus(false, `Run list failed (${r.status})`);
+        return;
+      }
+      runSelectNode.innerHTML = "";
+      const items = (r.body && r.body.items) || [];
+      if (!items.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No runs";
+        runSelectNode.appendChild(opt);
+        return;
+      }
+      items.forEach((run) => {
+        const opt = document.createElement("option");
+        opt.value = run.id;
+        opt.textContent = `${run.created_at} | ${run.action} | ${run.status} | ${run.id}`;
+        runSelectNode.appendChild(opt);
+      });
+      setStatus(true, `Loaded ${items.length} runs`);
+    }
+
+    async function loadTrace() {
+      const runId = runSelectNode.value;
+      if (!runId) {
+        setStatus(false, "Select a run");
+        return;
+      }
+      const r = await api(`/actions/runs-mine/${runId}/trace`, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${googleToken}` },
+      });
+      if (!r.ok) {
+        setStatus(false, `Trace failed (${r.status})`);
+        return;
+      }
+      renderNodes(r.body.nodes || []);
+      setStatus(true, `Trace loaded for ${runId}`);
+    }
+
+    async function verifyAndSetToken(token) {
+      const verify = await api("/auth/google/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: token }),
+      });
+      if (!verify.ok) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setAuthState(null);
+        return false;
+      }
+      googleToken = token;
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      setAuthState(verify.body.email);
+      await loadRunList();
+      return true;
+    }
+
+    async function onGoogleCredential(response) {
+      const token = response.credential || "";
+      if (!token) {
+        setStatus(false, "Google token missing");
+        return;
+      }
+      const ok = await verifyAndSetToken(token);
+      if (!ok) setStatus(false, "Google login failed");
+    }
+
+    async function tryStoredLogin() {
+      const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!stored) return false;
+      return await verifyAndSetToken(stored);
+    }
+
+    function logout() {
+      googleToken = "";
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      setAuthState(null);
+      runSelectNode.innerHTML = "";
+      traceGraphNode.innerHTML = "";
+      setStatus(true, "Logout eseguito.");
+    }
+
+    async function bootstrap() {
+      const cfg = await api("/auth/google/client-id", { method: "GET" });
+      const clientId = cfg.ok ? cfg.body.client_id : "";
+      if (!clientId) {
+        setStatus(false, "GOOGLE_CLIENT_ID not configured");
+        return;
+      }
+      google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
+      google.accounts.id.renderButton(googleSignInNode, { theme: "outline", size: "large" });
+      const restored = await tryStoredLogin();
+      if (!restored) {
+        setAuthState(null);
+        setStatus(true, "Waiting for Google login...");
+      }
+    }
+
+    window.addEventListener("load", () => {
+      logoutBtn.addEventListener("click", logout);
+      loadBtn.addEventListener("click", loadTrace);
+      bootstrap();
+    });
+  </script>
+</body>
+</html>

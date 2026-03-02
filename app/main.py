@@ -44,6 +44,11 @@ def summary_html() -> FileResponse:
 def my_rules_html() -> FileResponse:
     return FileResponse(static_dir / "my-rules.html")
 
+
+@app.get("/run-trace.html", include_in_schema=False)
+def run_trace_html() -> FileResponse:
+    return FileResponse(static_dir / "run-trace.html")
+
 app.include_router(things_router)
 app.include_router(actions_router)
 app.include_router(auth_router)

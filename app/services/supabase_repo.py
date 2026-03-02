@@ -115,6 +115,43 @@ class SupabaseRepo:
         return response.data or []
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def list_latest_runs_by_owner(self, owner_sub: str, limit: int = 10) -> list[dict[str, Any]]:
+        response = (
+            self._client.table("runs")
+            .select("*")
+            .eq("owner_sub", owner_sub)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def get_run_by_id_owner(self, run_id: UUID | str, owner_sub: str) -> dict[str, Any] | None:
+        response = (
+            self._client.table("runs")
+            .select("*")
+            .eq("id", str(run_id))
+            .eq("owner_sub", owner_sub)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        return rows[0] if rows else None
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
+    def list_messages_by_run_owner(self, run_id: UUID | str, owner_sub: str) -> list[dict[str, Any]]:
+        response = (
+            self._client.table("messages")
+            .select("*")
+            .eq("run_id", str(run_id))
+            .eq("owner_sub", owner_sub)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return response.data or []
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=4), reraise=True)
     def get_user_report_rules(self, owner_sub: str) -> str | None:
         response = (
             self._client.table("user_report_rules")

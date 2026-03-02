@@ -56,6 +56,7 @@ http://127.0.0.1:8000/
 Then login with Google and use tracker cards.
 Home is config-driven: trackers load from `/config/tracker-config-mine` (if present), otherwise fallback to default config in `static/index.html` (`DEFAULT_TRACKER_CONFIGS`). Choices post to `/things/choice-quick`.
 Weekly report uses a configurable time window (`REPORT_WINDOW_DAYS`, default `8`) and aggregates all tracked types before calling AI.
+Run trace UI is available at `/run-trace.html`.
 
 ### Read my things
 
@@ -84,6 +85,13 @@ curl -X POST http://127.0.0.1:8000/actions/weekly-report-mine \
 
 ```bash
 curl -X POST http://127.0.0.1:8000/actions/weekly-report-smart-mine \
+  -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
+```
+
+### Read my latest runs (owner-scoped)
+
+```bash
+curl "http://127.0.0.1:8000/actions/runs-mine/latest?limit=20" \
   -H "Authorization: Bearer YOUR_GOOGLE_ID_TOKEN"
 ```
 

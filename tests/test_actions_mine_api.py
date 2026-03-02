@@ -32,6 +32,47 @@ class RepoMineReportStub:
     def finish_run(self, run_id, status: str, error=None):
         return {"id": run_id, "status": status}
 
+    def list_latest_runs_by_owner(self, owner_sub: str, limit: int = 10):
+        self.last_owner_sub = owner_sub
+        return [
+            {
+                "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "owner_sub": owner_sub,
+                "owner_email": "mine@example.com",
+                "action": "weekly_report_smart",
+                "status": "success",
+                "input_summary": {"smart_tool_trace": [{"name": "get_window_coverage"}]},
+                "error": None,
+            }
+        ][:limit]
+
+    def get_run_by_id_owner(self, run_id: str, owner_sub: str):
+        self.last_owner_sub = owner_sub
+        return {
+            "id": run_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "owner_sub": owner_sub,
+            "owner_email": "mine@example.com",
+            "action": "weekly_report_smart",
+            "status": "success",
+            "input_summary": {"smart_tool_trace": [{"name": "get_daily_counts", "args": {"days": 8, "type": "mood"}}]},
+            "error": None,
+        }
+
+    def list_messages_by_run_owner(self, run_id: str, owner_sub: str):
+        return [
+            {
+                "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "owner_sub": owner_sub,
+                "recipient": "mine@example.com",
+                "subject": "Weekly report",
+                "action": "weekly_report_smart",
+                "run_id": run_id,
+            }
+        ]
+
 
 class MailerOk:
     async def send_plain_text(self, subject: str, body: str, recipient=None):
@@ -85,5 +126,30 @@ def test_weekly_report_smart_mine_filters_by_owner(monkeypatch):
     assert r.status_code == 200
     assert r.json()["action"] == "weekly_report_smart"
     assert repo.last_owner_sub == "sub-smart"
+
+    app.dependency_overrides.clear()
+
+
+def test_runs_mine_latest_and_trace(monkeypatch):
+    import app.actions_api as actions_api
+
+    repo = RepoMineReportStub()
+    app.dependency_overrides[require_google_user] = lambda: {"sub": "sub-trace", "email": "trace@example.com"}
+    monkeypatch.setattr(actions_api, "SupabaseRepo", lambda: repo)
+
+    client = TestClient(app)
+
+    r_latest = client.get("/actions/runs-mine/latest")
+    assert r_latest.status_code == 200
+    items = r_latest.json()["items"]
+    assert len(items) == 1
+    run_id = items[0]["id"]
+    assert repo.last_owner_sub == "sub-trace"
+
+    r_trace = client.get(f"/actions/runs-mine/{run_id}/trace")
+    assert r_trace.status_code == 200
+    body = r_trace.json()
+    assert body["run"]["id"] == run_id
+    assert len(body["nodes"]) >= 3
 
     app.dependency_overrides.clear()

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +23,53 @@ from app.settings import get_settings
 
 router = APIRouter(prefix="/actions", tags=["actions"])
 mailer = BrevoMailer()
+
+
+def _build_run_trace(run_row: dict, messages: list[dict]) -> list[dict]:
+    nodes: list[dict] = [
+        {
+            "id": "run_start",
+            "label": f"Run started ({run_row.get('action')})",
+            "kind": "start",
+            "meta": {"created_at": run_row.get("created_at")},
+        }
+    ]
+    input_summary = run_row.get("input_summary") or {}
+    tool_trace = input_summary.get("smart_tool_trace") or []
+    for i, item in enumerate(tool_trace, start=1):
+        nodes.append(
+            {
+                "id": f"tool_{i}",
+                "label": f"Tool {i}: {item.get('name') or 'unknown'}",
+                "kind": "tool",
+                "meta": item,
+            }
+        )
+
+    if messages:
+        for i, msg in enumerate(messages, start=1):
+            nodes.append(
+                {
+                    "id": f"message_{i}",
+                    "label": f"Message: {msg.get('subject') or 'email'}",
+                    "kind": "message",
+                    "meta": {
+                        "created_at": msg.get("created_at"),
+                        "recipient": msg.get("recipient"),
+                        "action": msg.get("action"),
+                    },
+                }
+            )
+
+    nodes.append(
+        {
+            "id": "run_end",
+            "label": f"Run finished ({run_row.get('status')})",
+            "kind": "end" if str(run_row.get("status")) == "success" else "error",
+            "meta": {"error": run_row.get("error")},
+        }
+    )
+    return nodes
 
 
 async def _run_weekly_report_for_owner(owner_sub: str, owner_email: str | None, smart_mode: bool = False) -> ActionResponse:
@@ -226,6 +274,27 @@ async def weekly_report_mine(google_user: dict = Depends(require_google_user)) -
         owner_sub=google_user.get("sub"),
         owner_email=google_user.get("email"),
     )
+
+
+@router.get("/runs-mine/latest")
+def latest_runs_mine(limit: int = Query(default=10, ge=1, le=50), google_user: dict = Depends(require_google_user)) -> dict:
+    repo = SupabaseRepo()
+    rows = repo.list_latest_runs_by_owner(owner_sub=google_user.get("sub"), limit=limit)
+    return {"items": rows}
+
+
+@router.get("/runs-mine/{run_id}/trace")
+def run_trace_mine(run_id: UUID, google_user: dict = Depends(require_google_user)) -> dict:
+    repo = SupabaseRepo()
+    run_row = repo.get_run_by_id_owner(run_id=str(run_id), owner_sub=google_user.get("sub"))
+    if not run_row:
+        raise HTTPException(status_code=404, detail="Run not found")
+    messages = repo.list_messages_by_run_owner(run_id=str(run_id), owner_sub=google_user.get("sub"))
+    return {
+        "run": run_row,
+        "messages": messages,
+        "nodes": _build_run_trace(run_row, messages),
+    }
 
 
 @router.post("/weekly-report-smart-mine", response_model=ActionResponse)
