@@ -33,6 +33,21 @@
     #status { font-family: Consolas, monospace; font-size: 12px; min-height: 20px; margin-top: 6px; }
     .ok { color: var(--ok); }
     .bad { color: var(--bad); }
+    .day-filters { margin: 8px 0; display: flex; gap: 6px; flex-wrap: wrap; }
+    .day-btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .day-btn.active {
+      border-color: #0f766e;
+      background: #ecfdf5;
+      color: #065f46;
+      font-weight: 700;
+    }
     .auth-state {
       border-radius: 999px;
       padding: 6px 10px;
@@ -109,7 +124,8 @@
 
     <div class="card">
       <h2>Recent Entries</h2>
-      <table id="recentTable"><thead><tr><th>Created</th><th>Type</th><th>Num</th><th>Text</th></tr></thead><tbody></tbody></table>
+      <div id="dayFilters" class="day-filters"></div>
+      <table id="recentTable"><thead><tr><th>Ora</th><th>Type</th><th>Num</th><th>Text</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
@@ -121,6 +137,10 @@
     const authStateNode = document.getElementById("authState");
     const logoutBtn = document.getElementById("logoutBtn");
     const googleSignInNode = document.getElementById("googleSignIn");
+    const dayFiltersNode = document.getElementById("dayFilters");
+    const APP_TIMEZONE = "Europe/Zurich";
+    let recentRowsState = [];
+    let selectedDayKey = "";
 
     function setAuthState(email) {
       if (email) {
@@ -157,6 +177,89 @@
       return entries.map(([k, v]) => `${k}(${v})`).join(", ");
     }
 
+    function dateKeyInTz(value) {
+      const dt = new Date(String(value || ""));
+      if (Number.isNaN(dt.getTime())) return "";
+      const parts = new Intl.DateTimeFormat("sv-SE", {
+        timeZone: APP_TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).formatToParts(dt);
+      const y = parts.find((p) => p.type === "year")?.value || "0000";
+      const m = parts.find((p) => p.type === "month")?.value || "00";
+      const d = parts.find((p) => p.type === "day")?.value || "00";
+      return `${y}-${m}-${d}`;
+    }
+
+    function timeInTz(value) {
+      const dt = new Date(String(value || ""));
+      if (Number.isNaN(dt.getTime())) return "";
+      return new Intl.DateTimeFormat("it-CH", {
+        timeZone: APP_TIMEZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      }).format(dt);
+    }
+
+    function dayDiffFromToday(dayKey) {
+      const today = dateKeyInTz(new Date().toISOString());
+      const toDate = (k) => new Date(`${k}T00:00:00Z`);
+      const ms = toDate(today).getTime() - toDate(dayKey).getTime();
+      return Math.floor(ms / 86400000);
+    }
+
+    function renderRecentRows() {
+      const recentBody = document.querySelector("#recentTable tbody");
+      recentBody.innerHTML = "";
+      const filtered = selectedDayKey
+        ? recentRowsState.filter((row) => dateKeyInTz(row.created_at) === selectedDayKey)
+        : recentRowsState;
+      if (!filtered.length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="4" class="k">Nessuna entry per questo giorno</td>`;
+        recentBody.appendChild(tr);
+        return;
+      }
+      filtered.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${timeInTz(row.created_at)}</td><td>${row.type || ""}</td><td>${row.value_num ?? ""}</td><td>${row.value_text ?? ""}</td>`;
+        recentBody.appendChild(tr);
+      });
+    }
+
+    function renderDayFilters() {
+      dayFiltersNode.innerHTML = "";
+      const uniqueDays = Array.from(new Set(recentRowsState.map((row) => dateKeyInTz(row.created_at)).filter(Boolean)));
+      uniqueDays.sort((a, b) => (a < b ? 1 : -1));
+      if (!uniqueDays.length) return;
+
+      if (!selectedDayKey || !uniqueDays.includes(selectedDayKey)) {
+        selectedDayKey = uniqueDays[0];
+      }
+
+      uniqueDays.forEach((dayKey) => {
+        const diff = dayDiffFromToday(dayKey);
+        let label = dayKey;
+        if (diff === 0) label = "oggi";
+        else if (diff > 0) label = `-${diff}`;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `day-btn${dayKey === selectedDayKey ? " active" : ""}`;
+        btn.textContent = label;
+        btn.title = dayKey;
+        btn.addEventListener("click", () => {
+          selectedDayKey = dayKey;
+          renderDayFilters();
+          renderRecentRows();
+        });
+        dayFiltersNode.appendChild(btn);
+      });
+    }
+
     function render(data) {
       document.getElementById("overview").innerHTML = `
         <div class="metric"><div class="k">Window Days</div><div class="v">${data.window_days}</div></div>
@@ -182,18 +285,13 @@
         valueBody.appendChild(tr);
       });
 
-      const recentBody = document.querySelector("#recentTable tbody");
-      recentBody.innerHTML = "";
-      const recentRows = (data.recent_entries || []).slice().sort((a, b) => {
+      recentRowsState = (data.recent_entries || []).slice().sort((a, b) => {
         const aTs = Date.parse(String(a.created_at || ""));
         const bTs = Date.parse(String(b.created_at || ""));
         return (Number.isNaN(bTs) ? 0 : bTs) - (Number.isNaN(aTs) ? 0 : aTs);
       });
-      recentRows.forEach((row) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${row.created_at || ""}</td><td>${row.type || ""}</td><td>${row.value_num ?? ""}</td><td>${row.value_text ?? ""}</td>`;
-        recentBody.appendChild(tr);
-      });
+      renderDayFilters();
+      renderRecentRows();
     }
 
     async function loadSummary() {
