@@ -48,6 +48,37 @@
       color: #065f46;
       font-weight: 700;
     }
+    .view-toggle { margin: 8px 0 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .view-btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .view-btn.active {
+      border-color: #0f766e;
+      background: #ecfdf5;
+      color: #065f46;
+      font-weight: 700;
+    }
+    .icons-board { display: none; margin-top: 8px; }
+    .icons-board.active { display: block; }
+    .icons-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .icon-chip {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 6px 10px;
+      font-size: 13px;
+      line-height: 1;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .icon-main { font-size: 16px; }
+    .icon-label { color: var(--muted); font-size: 12px; }
     .auth-state {
       border-radius: 999px;
       padding: 6px 10px;
@@ -125,7 +156,14 @@
     <div class="card">
       <h2>Recent Entries</h2>
       <div id="dayFilters" class="day-filters"></div>
+      <div id="recentViewToggle" class="view-toggle">
+        <button type="button" class="view-btn active" data-view="table">Table</button>
+        <button type="button" class="view-btn" data-view="icons">Icons</button>
+      </div>
       <table id="recentTable"><thead><tr><th>Ora</th><th>Type</th><th>Num</th><th>Text</th></tr></thead><tbody></tbody></table>
+      <div id="iconsBoard" class="icons-board">
+        <div id="iconsList" class="icons-list"></div>
+      </div>
     </div>
   </div>
 
@@ -138,9 +176,14 @@
     const logoutBtn = document.getElementById("logoutBtn");
     const googleSignInNode = document.getElementById("googleSignIn");
     const dayFiltersNode = document.getElementById("dayFilters");
+    const recentTableNode = document.getElementById("recentTable");
+    const iconsBoardNode = document.getElementById("iconsBoard");
+    const iconsListNode = document.getElementById("iconsList");
+    const recentViewToggleNode = document.getElementById("recentViewToggle");
     const APP_TIMEZONE = "Europe/Zurich";
     let recentRowsState = [];
     let selectedDayKey = "";
+    let selectedRecentView = "table";
 
     function setAuthState(email) {
       if (email) {
@@ -214,9 +257,7 @@
     function renderRecentRows() {
       const recentBody = document.querySelector("#recentTable tbody");
       recentBody.innerHTML = "";
-      const filtered = selectedDayKey
-        ? recentRowsState.filter((row) => dateKeyInTz(row.created_at) === selectedDayKey)
-        : recentRowsState;
+      const filtered = getFilteredRecentRows();
       if (!filtered.length) {
         const tr = document.createElement("tr");
         tr.innerHTML = `<td colspan="4" class="k">Nessuna entry per questo giorno</td>`;
@@ -228,6 +269,72 @@
         tr.innerHTML = `<td>${timeInTz(row.created_at)}</td><td>${row.type || ""}</td><td>${row.value_num ?? ""}</td><td>${row.value_text ?? ""}</td>`;
         recentBody.appendChild(tr);
       });
+    }
+
+    function iconForEntry(row) {
+      const type = String(row.type || "").toLowerCase();
+      const valueText = String(row.value_text || "").toLowerCase();
+      const valueNum = Number(row.value_num);
+
+      if (type === "mood") {
+        if (valueNum === 1) return "😡";
+        if (valueNum === 2) return "😢";
+        if (valueNum === 3) return "😐";
+        if (valueNum === 4) return "🙂";
+        if (valueNum === 5) return "😌";
+        return "🙂";
+      }
+      if (type === "pasti") return valueText === "poco" ? "🥗" : valueText === "giusto" ? "🍽️" : valueText === "tanto" ? "🍲" : valueText === "tantissimo" ? "🍕" : "🍽️";
+      if (type === "acqua") return valueText === "piccolo" ? "💧" : valueText === "medio" ? "🚰" : valueText === "grande" ? "🫗" : "💧";
+      if (type === "caffe") return valueText === "lungo" ? "🥤" : "☕";
+      if (type === "allenamento") return valueText === "bene" ? "💪" : valueText === "medio" ? "😐" : valueText === "male" ? "😮‍💨" : "🏋️";
+      if (type === "alcool") return valueText === "shot" ? "🥃" : valueText === "birra" ? "🍺" : valueText === "vino" ? "🍷" : valueText === "aperitivo" ? "🍸" : valueText === "pinta" ? "🍻" : valueText === "superalcolico" ? "🧉" : "🍺";
+      if (type === "tentazione") return valueText === "vinto" ? "😎" : valueText === "perso" ? "😔" : "⚖️";
+      return "📝";
+    }
+
+    function labelForEntry(row) {
+      const t = String(row.type || "");
+      if (row.value_num !== null && row.value_num !== undefined) return `${t}:${row.value_num}`;
+      if (row.value_text) return `${t}:${row.value_text}`;
+      return t;
+    }
+
+    function getFilteredRecentRows() {
+      return selectedDayKey
+        ? recentRowsState.filter((row) => dateKeyInTz(row.created_at) === selectedDayKey)
+        : recentRowsState;
+    }
+
+    function renderRecentIcons() {
+      iconsListNode.innerHTML = "";
+      const filtered = getFilteredRecentRows();
+      if (!filtered.length) {
+        iconsListNode.innerHTML = `<span class="k">Nessuna entry per questo giorno</span>`;
+        return;
+      }
+      filtered.forEach((row) => {
+        const chip = document.createElement("div");
+        chip.className = "icon-chip";
+        chip.innerHTML = `<span class="icon-main">${iconForEntry(row)}</span><span class="icon-label">${labelForEntry(row)}</span>`;
+        iconsListNode.appendChild(chip);
+      });
+    }
+
+    function renderRecentView() {
+      const buttons = recentViewToggleNode.querySelectorAll(".view-btn");
+      buttons.forEach((btn) => {
+        btn.className = `view-btn${btn.dataset.view === selectedRecentView ? " active" : ""}`;
+      });
+      if (selectedRecentView === "icons") {
+        recentTableNode.style.display = "none";
+        iconsBoardNode.className = "icons-board active";
+        renderRecentIcons();
+      } else {
+        recentTableNode.style.display = "table";
+        iconsBoardNode.className = "icons-board";
+        renderRecentRows();
+      }
     }
 
     function renderDayFilters() {
@@ -254,7 +361,7 @@
         btn.addEventListener("click", () => {
           selectedDayKey = dayKey;
           renderDayFilters();
-          renderRecentRows();
+          renderRecentView();
         });
         dayFiltersNode.appendChild(btn);
       });
@@ -291,7 +398,7 @@
         return (Number.isNaN(bTs) ? 0 : bTs) - (Number.isNaN(aTs) ? 0 : aTs);
       });
       renderDayFilters();
-      renderRecentRows();
+      renderRecentView();
     }
 
     async function loadSummary() {
@@ -378,6 +485,14 @@
     window.addEventListener("load", () => {
       document.getElementById("refresh").addEventListener("click", loadSummary);
       logoutBtn.addEventListener("click", logout);
+      recentViewToggleNode.addEventListener("click", (ev) => {
+        const target = ev.target;
+        if (!(target instanceof HTMLElement)) return;
+        const view = target.dataset.view;
+        if (view !== "table" && view !== "icons") return;
+        selectedRecentView = view;
+        renderRecentView();
+      });
       bootstrap();
     });
   </script>
