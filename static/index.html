@@ -711,10 +711,6 @@
 
     window.addEventListener("load", () => {
       undoBtn.addEventListener("click", undoLastCreated);
-      yesterdayToggle.addEventListener("click", () => {
-        useYesterday = !useYesterday;
-        renderYesterdayToggle();
-      });
       genericSaveBtn.addEventListener("click", submitGenericText);
       logoutBtn.addEventListener("click", logout);
       runMyReportBtn.addEventListener("click", runMyWeeklyReport);
