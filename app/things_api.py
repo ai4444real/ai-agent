@@ -14,12 +14,15 @@ from app.settings import get_settings
 router = APIRouter(prefix="/things", tags=["things"])
 
 
-def _resolve_created_at(use_yesterday: bool) -> str | None:
-    if not use_yesterday:
+def _resolve_created_at(days_ago: int, use_yesterday: bool) -> str | None:
+    effective_days_ago = int(days_ago or 0)
+    if effective_days_ago <= 0 and use_yesterday:
+        effective_days_ago = 1
+    if effective_days_ago <= 0:
         return None
     settings = get_settings()
     local_tz = ZoneInfo(settings.app_timezone)
-    local_dt = datetime.now(local_tz) - timedelta(hours=24)
+    local_dt = datetime.now(local_tz) - timedelta(days=effective_days_ago)
     return local_dt.astimezone(timezone.utc).isoformat()
 
 
@@ -75,13 +78,17 @@ def create_mood_quick(payload: MoodQuickRequest, google_user: dict = Depends(req
 @router.post("/text-quick", response_model=ThingResponse)
 def create_text_quick(payload: TextQuickRequest, google_user: dict = Depends(require_google_user)) -> ThingResponse:
     repo = SupabaseRepo()
+    created_at = _resolve_created_at(payload.days_ago, False)
+    record = {
+        **_owner_fields(google_user),
+        "type": payload.type,
+        "value_text": payload.value_text,
+        "meta": {"source": "text_quick", "google_email": google_user.get("email"), "days_ago": payload.days_ago},
+    }
+    if created_at:
+        record["created_at"] = created_at
     inserted = repo.insert_thing(
-        {
-            **_owner_fields(google_user),
-            "type": payload.type,
-            "value_text": payload.value_text,
-            "meta": {"source": "text_quick", "google_email": google_user.get("email")},
-        }
+        record
     )
     return ThingResponse(**inserted)
 
@@ -100,9 +107,10 @@ def create_choice_quick(payload: ChoiceQuickRequest, google_user: dict = Depends
             "choice_icon": payload.choice_icon,
             "choice_image": payload.choice_image,
             "use_yesterday": payload.use_yesterday,
+            "days_ago": payload.days_ago,
         },
     }
-    created_at = _resolve_created_at(payload.use_yesterday)
+    created_at = _resolve_created_at(payload.days_ago, payload.use_yesterday)
     if created_at:
         record["created_at"] = created_at
     if payload.value_kind == "num":
@@ -164,6 +172,7 @@ def summary_window(days: int = Query(default=8, ge=1, le=31), google_user: dict 
 
         recent_entries.append(
             {
+                "id": row.get("id"),
                 "created_at": row.get("created_at"),
                 "type": row.get("type"),
                 "value_num": row.get("value_num"),

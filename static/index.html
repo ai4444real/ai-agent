@@ -181,6 +181,20 @@
       color: #065f46;
       font-weight: 700;
     }
+    .days-btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .days-btn.active {
+      border-color: #0f766e;
+      background: #ecfdf5;
+      color: #065f46;
+      font-weight: 700;
+    }
     .generic-input {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -220,7 +234,8 @@
     <div class="card">
       <h2>Trackers (JSON Config)</h2>
       <div class="row">
-        <button id="yesterdayToggle" class="toggle" type="button">Yesterday: OFF</button>
+        <span class="pill">Registra per:</span>
+        <div id="daysAgoGroup" class="row" style="margin-top:0;"></div>
         <button id="runMyReportBtn" class="small-btn" type="button" disabled>Run my weekly report</button>
         <button id="runMySmartReportBtn" class="small-btn" type="button" disabled>Run smart weekly report</button>
       </div>
@@ -246,7 +261,7 @@
   <script>
     let googleToken = "";
     const TOKEN_STORAGE_KEY = "aa_google_id_token";
-    let useYesterday = false;
+    let selectedDaysAgo = 0;
 
     // Configurazione centralizzata dei tracker.
     // valueKind: "num" salva su value_num, "text" salva su value_text.
@@ -271,7 +286,7 @@
     const logoutBtn = document.getElementById("logoutBtn");
     const statusNode = document.getElementById("status");
     const trackersNode = document.getElementById("trackers");
-    const yesterdayToggle = document.getElementById("yesterdayToggle");
+    const daysAgoGroupNode = document.getElementById("daysAgoGroup");
     const runMyReportBtn = document.getElementById("runMyReportBtn");
     const runMySmartReportBtn = document.getElementById("runMySmartReportBtn");
     const lastCreatedRow = document.getElementById("lastCreatedRow");
@@ -372,14 +387,15 @@
           "Content-Type": "application/json",
           "Authorization": `Bearer ${googleToken}`
         },
-        body: JSON.stringify({ type: type, value_text: valueText })
+        body: JSON.stringify({ type: type, value_text: valueText, days_ago: selectedDaysAgo })
       });
       genericSaveBtn.disabled = false;
       if (!r.ok) {
         setStatus(false, `Generic save failed (${r.status}): ${JSON.stringify(r.body)}`);
         return;
       }
-      setStatus(true, `${type}:${valueText} salvato. id=${r.body.id || "n/a"}`);
+      const modeLabel = selectedDaysAgo > 0 ? ` [-${selectedDaysAgo}]` : "";
+      setStatus(true, `${type}:${valueText} salvato${modeLabel}. id=${r.body.id || "n/a"}`);
       if (r.body.id) {
         lastCreatedId = r.body.id;
         lastCreatedText.textContent = `last: ${type}:${valueText} id=${r.body.id}`;
@@ -445,7 +461,7 @@
       const payload = {
         type: cfg.type,
         value_kind: cfg.valueKind,
-        use_yesterday: useYesterday,
+        days_ago: selectedDaysAgo,
         choice_label: choice.label,
         choice_icon: choice.icon || null,
         choice_image: choice.image || null
@@ -471,7 +487,7 @@
         return;
       }
 
-      const modeLabel = useYesterday ? " [yesterday]" : "";
+      const modeLabel = selectedDaysAgo > 0 ? ` [-${selectedDaysAgo}]` : "";
       setStatus(true, `${cfg.type}:${choice.value} salvato${modeLabel}. id=${r.body.id || "n/a"}`);
       if (r.body.id) {
         lastCreatedId = r.body.id;
@@ -504,9 +520,20 @@
       lastCreatedText.textContent = "";
     }
 
-    function renderYesterdayToggle() {
-      yesterdayToggle.className = useYesterday ? "toggle on" : "toggle";
-      yesterdayToggle.textContent = useYesterday ? "Yesterday: ON" : "Yesterday: OFF";
+    function renderDaysAgoSelector() {
+      daysAgoGroupNode.innerHTML = "";
+      const offsets = [0, 1, 2, 3, 4, 5, 6, 7];
+      offsets.forEach((offset) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `days-btn${offset === selectedDaysAgo ? " active" : ""}`;
+        btn.textContent = offset === 0 ? "oggi" : `-${offset}`;
+        btn.addEventListener("click", () => {
+          selectedDaysAgo = offset;
+          renderDaysAgoSelector();
+        });
+        daysAgoGroupNode.appendChild(btn);
+      });
     }
 
     function normalizeTrackerConfig(raw) {
@@ -692,7 +719,7 @@
       logoutBtn.addEventListener("click", logout);
       runMyReportBtn.addEventListener("click", runMyWeeklyReport);
       runMySmartReportBtn.addEventListener("click", runMySmartWeeklyReport);
-      renderYesterdayToggle();
+      renderDaysAgoSelector();
       setTimeout(bootstrap, 200);
     });
   </script>

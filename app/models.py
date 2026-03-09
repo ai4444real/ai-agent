@@ -84,6 +84,7 @@ class MoodQuickRequest(BaseModel):
 class TextQuickRequest(BaseModel):
     type: str = Field(min_length=1)
     value_text: str = Field(min_length=1)
+    days_ago: int = Field(default=0, ge=0, le=30)
 
 
 class ChoiceQuickRequest(BaseModel):
@@ -92,6 +93,7 @@ class ChoiceQuickRequest(BaseModel):
     value_num: Decimal | None = None
     value_text: str | None = None
     use_yesterday: bool = False
+    days_ago: int = Field(default=0, ge=0, le=30)
     choice_label: str | None = None
     choice_icon: str | None = None
     choice_image: str | None = None
