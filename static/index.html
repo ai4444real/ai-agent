@@ -786,7 +786,15 @@
           merged.push(JSON.parse(JSON.stringify(cfg)));
         }
       });
-      return merged;
+      const defaultOrder = new Map(DEFAULT_TRACKER_CONFIGS.map((cfg, index) => [cfg.type, index]));
+      return merged.slice().sort((a, b) => {
+        const aIndex = defaultOrder.has(a.type) ? defaultOrder.get(a.type) : Number.MAX_SAFE_INTEGER;
+        const bIndex = defaultOrder.has(b.type) ? defaultOrder.get(b.type) : Number.MAX_SAFE_INTEGER;
+        if (aIndex !== bIndex) {
+          return aIndex - bIndex;
+        }
+        return 0;
+      });
     }
 
     async function loadTrackerConfigFromServer() {
