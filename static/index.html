@@ -325,6 +325,18 @@
           { value: 2, label: "2", icon: "😢" },
           { value: 3, label: "3", icon: "😐" },
           { value: 4, label: "4", icon: "🙂" },
+            { value: 5, label: "5", icon: "😌" }
+          ]
+      },
+      {
+        type: "percezione",
+        title: "Percezione",
+        valueKind: "num",
+        choices: [
+          { value: 1, label: "1", icon: "😡" },
+          { value: 2, label: "2", icon: "😢" },
+          { value: 3, label: "3", icon: "😐" },
+          { value: 4, label: "4", icon: "🙂" },
           { value: 5, label: "5", icon: "😌" }
         ]
       }
@@ -766,6 +778,17 @@
       return normalized;
     }
 
+    function withMissingDefaultTrackers(configs) {
+      const merged = configs.slice();
+      const existingTypes = new Set(merged.map((cfg) => cfg.type));
+      DEFAULT_TRACKER_CONFIGS.forEach((cfg) => {
+        if (!existingTypes.has(cfg.type)) {
+          merged.push(JSON.parse(JSON.stringify(cfg)));
+        }
+      });
+      return merged;
+    }
+
     async function loadTrackerConfigFromServer() {
       if (!googleToken) {
         trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
@@ -805,7 +828,7 @@
         setStatus(false, "Tracker config struttura non valida, uso default.");
         return;
       }
-      trackerConfigs = normalized;
+      trackerConfigs = withMissingDefaultTrackers(normalized);
       renderTrackers();
       setStatus(true, "Tracker config utente caricata.");
     }
