@@ -204,6 +204,44 @@
       background: #fff;
       color: var(--text);
     }
+    .day-filters {
+      margin: 8px 0;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .recent-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .recent-table th,
+    .recent-table td {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 6px;
+    }
+    .recent-table th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .del-btn {
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #b91c1c;
+      border-radius: 999px;
+      width: 24px;
+      height: 24px;
+      line-height: 20px;
+      text-align: center;
+      padding: 0;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .del-btn:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -256,12 +294,24 @@
         <button id="genericSaveBtn" class="small-btn" type="button" disabled>Save generic</button>
       </div>
     </div>
+
+    <div class="card">
+      <h2>Recent entries</h2>
+      <div id="recentDayFilters" class="day-filters"></div>
+      <table class="recent-table" id="recentTable">
+        <thead>
+          <tr><th>Ora</th><th>Type</th><th>Num</th><th>Text</th><th>Del</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
   <script>
     let googleToken = "";
     const TOKEN_STORAGE_KEY = "aa_google_id_token";
     let selectedDaysAgo = 0;
+    const APP_TIMEZONE = "Europe/Zurich";
 
     // Configurazione centralizzata dei tracker.
     // valueKind: "num" salva su value_num, "text" salva su value_text.
@@ -296,11 +346,154 @@
     const genericValueNode = document.getElementById("genericValue");
     const genericSaveBtn = document.getElementById("genericSaveBtn");
     const googleSignInNode = document.getElementById("googleSignIn");
+    const recentDayFiltersNode = document.getElementById("recentDayFilters");
+    const recentTableBody = document.querySelector("#recentTable tbody");
     let lastCreatedId = null;
+    let recentRowsState = [];
+    let selectedRecentDayKey = "";
 
     function setStatus(ok, text) {
       statusNode.className = ok ? "ok" : "bad";
       statusNode.textContent = text;
+    }
+
+    function dateKeyInTz(value) {
+      const dt = new Date(String(value || ""));
+      if (Number.isNaN(dt.getTime())) return "";
+      const parts = new Intl.DateTimeFormat("sv-SE", {
+        timeZone: APP_TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).formatToParts(dt);
+      const y = parts.find((p) => p.type === "year")?.value || "0000";
+      const m = parts.find((p) => p.type === "month")?.value || "00";
+      const d = parts.find((p) => p.type === "day")?.value || "00";
+      return `${y}-${m}-${d}`;
+    }
+
+    function timeInTz(value) {
+      const dt = new Date(String(value || ""));
+      if (Number.isNaN(dt.getTime())) return "";
+      return new Intl.DateTimeFormat("it-CH", {
+        timeZone: APP_TIMEZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      }).format(dt);
+    }
+
+    function dayDiffFromToday(dayKey) {
+      const today = dateKeyInTz(new Date().toISOString());
+      const toDate = (k) => new Date(`${k}T00:00:00Z`);
+      const ms = toDate(today).getTime() - toDate(dayKey).getTime();
+      return Math.floor(ms / 86400000);
+    }
+
+    function getFilteredRecentRows() {
+      return selectedRecentDayKey
+        ? recentRowsState.filter((row) => dateKeyInTz(row.created_at) === selectedRecentDayKey)
+        : recentRowsState;
+    }
+
+    function renderRecentRows() {
+      recentTableBody.innerHTML = "";
+      const filtered = getFilteredRecentRows();
+      if (!filtered.length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="5" style="color:var(--muted);">Nessuna entry per questo giorno</td>`;
+        recentTableBody.appendChild(tr);
+        return;
+      }
+      filtered.forEach((row) => {
+        const tr = document.createElement("tr");
+        const rowId = row.id || "";
+        const delBtn = rowId ? `<button class="del-btn" data-id="${rowId}" title="Delete">X</button>` : "";
+        tr.innerHTML = `<td>${timeInTz(row.created_at)}</td><td>${row.type || ""}</td><td>${row.value_num ?? ""}</td><td>${row.value_text ?? ""}</td><td>${delBtn}</td>`;
+        recentTableBody.appendChild(tr);
+      });
+    }
+
+    function renderRecentDayFilters() {
+      recentDayFiltersNode.innerHTML = "";
+      const uniqueDays = Array.from(new Set(recentRowsState.map((row) => dateKeyInTz(row.created_at)).filter(Boolean)));
+      uniqueDays.sort((a, b) => (a < b ? 1 : -1));
+      if (!uniqueDays.length) {
+        selectedRecentDayKey = "";
+        renderRecentRows();
+        return;
+      }
+
+      if (!selectedRecentDayKey || !uniqueDays.includes(selectedRecentDayKey)) {
+        selectedRecentDayKey = uniqueDays[0];
+      }
+
+      uniqueDays.forEach((dayKey) => {
+        const diff = dayDiffFromToday(dayKey);
+        let label = dayKey;
+        if (diff === 0) label = "oggi";
+        else if (diff > 0) label = `-${diff}`;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `days-btn${dayKey === selectedRecentDayKey ? " active" : ""}`;
+        btn.textContent = label;
+        btn.title = dayKey;
+        btn.addEventListener("click", () => {
+          selectedRecentDayKey = dayKey;
+          renderRecentDayFilters();
+          renderRecentRows();
+        });
+        recentDayFiltersNode.appendChild(btn);
+      });
+    }
+
+    async function loadRecentEntries() {
+      if (!googleToken) {
+        recentRowsState = [];
+        selectedRecentDayKey = "";
+        renderRecentDayFilters();
+        return;
+      }
+      const r = await api("/things/summary-window?days=8", {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${googleToken}` }
+      });
+      if (!r.ok) {
+        recentRowsState = [];
+        selectedRecentDayKey = "";
+        renderRecentDayFilters();
+        setStatus(false, `Recent entries load failed (${r.status})`);
+        return;
+      }
+      recentRowsState = (r.body.recent_entries || []).slice().sort((a, b) => {
+        const aTs = Date.parse(String(a.created_at || ""));
+        const bTs = Date.parse(String(b.created_at || ""));
+        return (Number.isNaN(bTs) ? 0 : bTs) - (Number.isNaN(aTs) ? 0 : aTs);
+      });
+      renderRecentDayFilters();
+      renderRecentRows();
+    }
+
+    async function deleteEntryById(id) {
+      const ok = window.confirm("Cancellare questa registrazione?");
+      if (!ok) return;
+      const r = await api(`/things-mine/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${googleToken}` },
+      });
+      if (!r.ok) {
+        setStatus(false, `Delete failed (${r.status}): ${JSON.stringify(r.body)}`);
+        return;
+      }
+      if (lastCreatedId === id) {
+        lastCreatedId = null;
+        lastCreatedRow.style.display = "none";
+        lastCreatedText.textContent = "";
+      }
+      setStatus(true, `Deleted ${id}`);
+      await loadRecentEntries();
     }
 
     function setChoiceButtonsEnabled(enabled) {
@@ -402,6 +595,7 @@
         lastCreatedRow.style.display = "flex";
       }
       genericValueNode.value = "";
+      await loadRecentEntries();
     }
 
     async function api(path, options) {
@@ -494,6 +688,7 @@
         lastCreatedText.textContent = `last: ${cfg.type}:${choice.value} id=${r.body.id}`;
         lastCreatedRow.style.display = "flex";
       }
+      await loadRecentEntries();
     }
 
     async function undoLastCreated() {
@@ -518,6 +713,7 @@
       lastCreatedId = null;
       lastCreatedRow.style.display = "none";
       lastCreatedText.textContent = "";
+      await loadRecentEntries();
     }
 
     function renderDaysAgoSelector() {
@@ -639,6 +835,7 @@
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
       setAuthState(verify.body.email);
       await loadTrackerConfigFromServer();
+      await loadRecentEntries();
       setChoiceButtonsEnabled(true);
       setStatus(true, "Login OK. Seleziona una scelta da un tracker.");
     }
@@ -661,6 +858,7 @@
       googleToken = stored;
       setAuthState(verify.body.email);
       await loadTrackerConfigFromServer();
+      await loadRecentEntries();
       setChoiceButtonsEnabled(true);
       setStatus(true, "Sessione ripristinata.");
       return true;
@@ -671,6 +869,9 @@
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       trackerConfigs = JSON.parse(JSON.stringify(DEFAULT_TRACKER_CONFIGS));
       renderTrackers();
+      recentRowsState = [];
+      selectedRecentDayKey = "";
+      renderRecentDayFilters();
       setChoiceButtonsEnabled(false);
       setAuthState(null);
       setStatus(true, "Logout eseguito.");
@@ -715,6 +916,13 @@
       logoutBtn.addEventListener("click", logout);
       runMyReportBtn.addEventListener("click", runMyWeeklyReport);
       runMySmartReportBtn.addEventListener("click", runMySmartWeeklyReport);
+      recentTableBody.addEventListener("click", (ev) => {
+        const target = ev.target;
+        if (!(target instanceof HTMLElement)) return;
+        const id = target.dataset.id;
+        if (!id) return;
+        deleteEntryById(id);
+      });
       renderDaysAgoSelector();
       setTimeout(bootstrap, 200);
     });
