@@ -140,7 +140,7 @@ curl -X PUT "http://127.0.0.1:8000/config/tracker-config-mine" \
 
 ## 5) Deploy
 
-Current production is exposed behind Cloudflare/custom domain. Keep this documented operationally: repo push alone is not the same thing as a verified production deploy.
+Current production runs on Render. Treat `git push` and successful Render deploy as two separate operational checks.
 
 ### Backend origin
 

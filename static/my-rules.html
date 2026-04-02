@@ -115,6 +115,32 @@
   <script>
     let googleToken = "";
     const TOKEN_STORAGE_KEY = "aa_google_id_token";
+    const DEFAULT_TRACKER_CONFIGS = [
+      {
+        type: "mood",
+        title: "Mood",
+        valueKind: "num",
+        choices: [
+          { value: 1, label: "1", icon: "😡" },
+          { value: 2, label: "2", icon: "😢" },
+          { value: 3, label: "3", icon: "😐" },
+          { value: 4, label: "4", icon: "🙂" },
+          { value: 5, label: "5", icon: "😌" }
+        ]
+      },
+      {
+        type: "percezione",
+        title: "Percezione",
+        valueKind: "num",
+        choices: [
+          { value: 1, label: "1", icon: "😡" },
+          { value: 2, label: "2", icon: "😢" },
+          { value: 3, label: "3", icon: "😐" },
+          { value: 4, label: "4", icon: "🙂" },
+          { value: 5, label: "5", icon: "😌" }
+        ]
+      }
+    ];
 
     const whoNode = document.getElementById("who");
     const authStateNode = document.getElementById("authState");
@@ -183,6 +209,28 @@
       }
     }
 
+    function withMissingDefaultTrackers(configs) {
+      if (!Array.isArray(configs)) {
+        return configs;
+      }
+      const merged = configs.slice();
+      const existingTypes = new Set(merged.map((cfg) => cfg && cfg.type).filter(Boolean));
+      DEFAULT_TRACKER_CONFIGS.forEach((cfg) => {
+        if (!existingTypes.has(cfg.type)) {
+          merged.push(JSON.parse(JSON.stringify(cfg)));
+        }
+      });
+      const defaultOrder = new Map(DEFAULT_TRACKER_CONFIGS.map((cfg, index) => [cfg.type, index]));
+      return merged.slice().sort((a, b) => {
+        const aIndex = defaultOrder.has(a?.type) ? defaultOrder.get(a.type) : Number.MAX_SAFE_INTEGER;
+        const bIndex = defaultOrder.has(b?.type) ? defaultOrder.get(b.type) : Number.MAX_SAFE_INTEGER;
+        if (aIndex !== bIndex) {
+          return aIndex - bIndex;
+        }
+        return 0;
+      });
+    }
+
     async function loadRules() {
       if (!googleToken) return;
       const r = await api("/config/report-rules-mine", {
@@ -225,7 +273,16 @@
         setStatus(false, `Load tracker config failed (${r.status})`);
         return;
       }
-      trackerConfigNode.value = normalizeJsonText(r.body.text || "");
+      const rawText = r.body.text || "";
+      if (!rawText || !String(rawText).trim()) {
+        trackerConfigNode.value = JSON.stringify(DEFAULT_TRACKER_CONFIGS, null, 2);
+      } else {
+        try {
+          trackerConfigNode.value = JSON.stringify(withMissingDefaultTrackers(JSON.parse(rawText)), null, 2);
+        } catch (_) {
+          trackerConfigNode.value = normalizeJsonText(rawText);
+        }
+      }
       updateCounts();
       setStatus(true, "Tracker config loaded");
     }
@@ -240,7 +297,7 @@
         setStatus(false, "Tracker config JSON non valido");
         return;
       }
-      const normalized = JSON.stringify(parsed, null, 2);
+      const normalized = JSON.stringify(withMissingDefaultTrackers(parsed), null, 2);
       const r = await api("/config/tracker-config-mine", {
         method: "PUT",
         headers: {
